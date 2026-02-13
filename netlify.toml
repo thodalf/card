@@ -9,15 +9,3 @@
   from = "/*"
   to = "/index.html"
   status = 200
-
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "no-referrer"
-```
-
-**_redirects** (dans le dossier `public/`) :
-```
-/*    /index.html   200
