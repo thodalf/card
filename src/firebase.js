@@ -1,18 +1,25 @@
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, get, onValue, update, remove } from 'firebase/database';
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  // Remplacez par VOS clés Firebase
-  apiKey: "VOTRE_API_KEY",
-  authDomain: "VOTRE_PROJECT.firebaseapp.com",
-  databaseURL: "https://VOTRE_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "VOTRE_PROJECT",
-  storageBucket: "VOTRE_PROJECT.appspot.com",
-  messagingSenderId: "VOTRE_SENDER_ID",
-  appId: "VOTRE_APP_ID"
+  apiKey: "AIzaSyBqp3ZY0wT7xn7pLWSyGGOoa83BYd2h6g0",
+  authDomain: "card-d03bb.firebaseapp.com",
+  databaseURL: "https://card-d03bb-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "card-d03bb",
+  storageBucket: "card-d03bb.firebasestorage.app",
+  messagingSenderId: "929632721753",
+  appId: "1:929632721753:web:59d208df3d144cec85ca48",
+  measurementId: "G-P1NSLWDE3R"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 export const db = getDatabase(app);
 
 export const createGame = async (code, gameState) => {
