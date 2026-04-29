@@ -15,6 +15,137 @@ const TacticalCardGame = () => {
   const [animatingCells, setAnimatingCells] = useState({});
   const [damagedValues, setDamagedValues] = useState({});
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [winner, setWinner] = useState(null);
+  const [roomCode, setRoomCode] = useState('');
+  const [inputCode, setInputCode] = useState('');
+  const [playerNumber, setPlayerNumber] = useState(null);
+  const [isWaiting, setIsWaiting] = useState(false);
+  const [onlineError, setOnlineError] = useState('');
+
+  const playSound = (type) => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      if (type === 'place') {
+        // Son de placement : ton ascendant
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.1);
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+      }
+      
+      if (type === 'move') {
+        // Son de déplacement : swoosh
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.15);
+        
+        gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.15);
+      }
+      
+      if (type === 'attack') {
+        // Son d'attaque : impact
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.1);
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+      }
+      
+      if (type === 'destroy') {
+        // Son de destruction : explosion
+        const noise = audioContext.createBufferSource();
+        const bufferSize = audioContext.sampleRate * 0.5;
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+        }
+        
+        noise.buffer = buffer;
+        
+        const filter = audioContext.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1000, audioContext.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.5);
+        
+        const gainNode = audioContext.createGain();
+        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        noise.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        noise.start(audioContext.currentTime);
+        noise.stop(audioContext.currentTime + 0.5);
+        
+        // Ajouter un boom grave
+        const boom = audioContext.createOscillator();
+        const boomGain = audioContext.createGain();
+        boom.connect(boomGain);
+        boomGain.connect(audioContext.destination);
+        
+        boom.type = 'sine';
+        boom.frequency.setValueAtTime(80, audioContext.currentTime);
+        boom.frequency.exponentialRampToValueAtTime(20, audioContext.currentTime + 0.3);
+        
+        boomGain.gain.setValueAtTime(0.5, audioContext.currentTime);
+        boomGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        
+        boom.start(audioContext.currentTime);
+        boom.stop(audioContext.currentTime + 0.3);
+      }
+    } catch (err) {
+      console.log('Sound playback failed:', err);
+    }
+  };
+
+  const checkGameOver = () => {
+    const player1Cards = board.filter(cell => cell && cell.owner === 1).length + player1Hand.length;
+    const player2Cards = board.filter(cell => cell && cell.owner === 2).length + player2Hand.length;
+    
+    if (player1Cards === 0) {
+      setGameOver(true);
+      setWinner(2);
+      return true;
+    }
+    if (player2Cards === 0) {
+      setGameOver(true);
+      setWinner(1);
+      return true;
+    }
+    return false;
+  };
 
   const toggleMusic = () => {
     const audio = document.getElementById('game-music');
@@ -96,6 +227,170 @@ const TacticalCardGame = () => {
     setPlayer2Hand([...p2Deck]);
     setGameMode('local');
     setMessage('Joueur 1 commence');
+    setPlayerNumber(null);
+  };
+
+  const generateRoomCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
+
+  const createOnlineGame = async () => {
+    try {
+      const code = generateRoomCode();
+      const p1Deck = generateDeck();
+      
+      const gameState = {
+        player1Hand: p1Deck,
+        player2Hand: null,
+        board: Array(25).fill(null),
+        currentPlayer: 1,
+        actionsUsed: { place: false, moveCount: 0, attack: false },
+        movedCards: [],
+        damagedValues: {},
+        message: 'En attente du joueur 2...',
+        gameOver: false,
+        winner: null,
+        createdAt: Date.now(),
+        lastUpdate: Date.now()
+      };
+      
+      await window.storage.set('game-' + code, JSON.stringify(gameState), true);
+      
+      setRoomCode(code);
+      setPlayerNumber(1);
+      setPlayer1Hand(p1Deck);
+      setBoard(Array(25).fill(null));
+      setCurrentPlayer(1);
+      setIsWaiting(true);
+      setGameMode('online');
+      setMessage('En attente du joueur 2...');
+      
+      // Polling pour détecter quand le joueur 2 rejoint
+      pollGameState(code, 1);
+    } catch (error) {
+      setOnlineError('Erreur lors de la création de la partie');
+      console.error(error);
+    }
+  };
+
+  const joinOnlineGame = async () => {
+    if (!inputCode || inputCode.length !== 6) {
+      setOnlineError('Code invalide (6 caractères requis)');
+      return;
+    }
+    
+    try {
+      const code = inputCode.toUpperCase();
+      const result = await window.storage.get('game-' + code, true);
+      
+      if (!result) {
+        setOnlineError('Code de partie introuvable');
+        return;
+      }
+      
+      const gameState = JSON.parse(result.value);
+      
+      if (gameState.player2Hand) {
+        setOnlineError('Cette partie est déjà complète');
+        return;
+      }
+      
+      const p2Deck = generateDeck();
+      gameState.player2Hand = p2Deck;
+      gameState.message = 'Joueur 1 commence';
+      gameState.lastUpdate = Date.now();
+      
+      await window.storage.set('game-' + code, JSON.stringify(gameState), true);
+      
+      setRoomCode(code);
+      setPlayerNumber(2);
+      setPlayer1Hand(gameState.player1Hand);
+      setPlayer2Hand(p2Deck);
+      setBoard(gameState.board);
+      setCurrentPlayer(gameState.currentPlayer);
+      setGameMode('online');
+      setIsWaiting(false);
+      setMessage('Joueur 1 commence');
+      setOnlineError('');
+      
+      pollGameState(code, 2);
+    } catch (error) {
+      setOnlineError('Erreur lors de la connexion');
+      console.error(error);
+    }
+  };
+
+  const pollGameState = (code, myPlayerNumber) => {
+    const interval = setInterval(async () => {
+      try {
+        const result = await window.storage.get('game-' + code, true);
+        if (!result) return;
+        
+        const gameState = JSON.parse(result.value);
+        
+        // Si le joueur 2 a rejoint
+        if (myPlayerNumber === 1 && gameState.player2Hand && isWaiting) {
+          setPlayer2Hand(gameState.player2Hand);
+          setIsWaiting(false);
+          setMessage('Joueur 1 commence');
+        }
+        
+        // Synchroniser l'état si ce n'est pas notre tour
+        if (gameState.currentPlayer !== myPlayerNumber || gameState.gameOver) {
+          setBoard(gameState.board);
+          setCurrentPlayer(gameState.currentPlayer);
+          setPlayer1Hand(gameState.player1Hand);
+          if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
+          setActionsUsed(gameState.actionsUsed);
+          setMovedCards(new Set(gameState.movedCards));
+          setDamagedValues(gameState.damagedValues);
+          setMessage(gameState.message);
+          setGameOver(gameState.gameOver);
+          setWinner(gameState.winner);
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 1500);
+    
+    return () => clearInterval(interval);
+  };
+
+  const syncGameState = async () => {
+    if (gameMode !== 'online' || !roomCode) return;
+    
+    try {
+      const gameState = {
+        player1Hand: player1Hand,
+        player2Hand: player2Hand,
+        board: board,
+        currentPlayer: currentPlayer,
+        actionsUsed: actionsUsed,
+        movedCards: Array.from(movedCards),
+        damagedValues: damagedValues,
+        message: message,
+        gameOver: gameOver,
+        winner: winner,
+        lastUpdate: Date.now()
+      };
+      
+      await window.storage.set('game-' + roomCode, JSON.stringify(gameState), true);
+    } catch (error) {
+      console.error('Sync error:', error);
+    }
+  };
+
+  // Synchroniser à chaque changement d'état important
+  useEffect(() => {
+    if (gameMode === 'online' && !isWaiting) {
+      syncGameState();
+    }
+  }, [board, currentPlayer, player1Hand, player2Hand, actionsUsed, message, gameOver]);
+
+  const copyRoomCode = () => {
+    navigator.clipboard.writeText(roomCode);
+    setMessage('Code copié dans le presse-papiers !');
+    setTimeout(() => setMessage('En attente du joueur 2...'), 2000);
   };
 
   const triggerAnimation = (index, type) => {
@@ -106,7 +401,7 @@ const TacticalCardGame = () => {
         delete newState[index];
         return newState;
       });
-    }, type === 'destroy' ? 800 : 600);
+    }, type === 'destroy' ? 1200 : 600);
   };
 
   const isCorner = (index) => {
@@ -140,6 +435,11 @@ const TacticalCardGame = () => {
   };
 
   const handlePlaceCard = (cardIndex, boardIndex) => {
+    if (gameMode === 'online' && playerNumber !== currentPlayer) {
+      setMessage('Ce n\'est pas votre tour !');
+      return false;
+    }
+    
     if (actionsUsed.place) {
       setMessage('Vous avez déjà placé une carte ce tour !');
       return false;
@@ -163,6 +463,7 @@ const TacticalCardGame = () => {
     currentHand.splice(cardIndex, 1);
 
     triggerAnimation(boardIndex, 'place');
+    playSound('place');
     setBoard(newBoard);
     if (currentPlayer === 1) setPlayer1Hand(currentHand);
     else setPlayer2Hand(currentHand);
@@ -173,6 +474,11 @@ const TacticalCardGame = () => {
   };
 
   const handleMoveCard = (fromIndex, toIndex) => {
+    if (gameMode === 'online' && playerNumber !== currentPlayer) {
+      setMessage('Ce n\'est pas votre tour !');
+      return false;
+    }
+    
     if (actionsUsed.moveCount >= 2) {
       setMessage('Vous avez déjà effectué 2 déplacements ce tour !');
       return false;
@@ -204,6 +510,7 @@ const TacticalCardGame = () => {
     newBoard[fromIndex] = null;
 
     triggerAnimation(toIndex, 'move');
+    playSound('move');
     setBoard(newBoard);
     setActionsUsed({ ...actionsUsed, moveCount: actionsUsed.moveCount + 1 });
     setMovedCards(new Set([...movedCards, toIndex]));
@@ -212,6 +519,11 @@ const TacticalCardGame = () => {
   };
 
   const handleAttack = (attackerIndex, defenderIndex) => {
+    if (gameMode === 'online' && playerNumber !== currentPlayer) {
+      setMessage('Ce n\'est pas votre tour !');
+      return false;
+    }
+    
     if (actionsUsed.attack) {
       setMessage('Vous avez déjà attaqué ce tour !');
       return false;
@@ -238,6 +550,7 @@ const TacticalCardGame = () => {
 
     triggerAnimation(attackerIndex, 'attack');
     triggerAnimation(defenderIndex, 'attack');
+    playSound('attack');
 
     setTimeout(() => {
       const newBoard = [...board];
@@ -305,6 +618,7 @@ const TacticalCardGame = () => {
       if (attackerDestroyed && defenderDestroyed) {
         triggerAnimation(attackerIndex, 'destroy');
         triggerAnimation(defenderIndex, 'destroy');
+        playSound('destroy');
         setTimeout(() => {
           newBoard[attackerIndex] = null;
           newBoard[defenderIndex] = null;
@@ -313,10 +627,11 @@ const TacticalCardGame = () => {
           delete updatedDamaged[defenderIndex];
           setDamagedValues(updatedDamaged);
           setBoard([...newBoard]);
-        }, 400);
-        setMessage('Les deux cartes ont été détruites !');
+        }, 1200);
+        setMessage('💥 Les deux cartes ont été détruites ! 💥');
       } else if (defenderDestroyed) {
         triggerAnimation(defenderIndex, 'destroy');
+        playSound('destroy');
         setTimeout(() => {
           newBoard[defenderIndex] = null;
           newBoard[attackerIndex] = newAttacker;
@@ -324,10 +639,11 @@ const TacticalCardGame = () => {
           delete updatedDamaged[defenderIndex];
           setDamagedValues(updatedDamaged);
           setBoard([...newBoard]);
-        }, 400);
-        setMessage('La carte ennemie a été détruite !');
+        }, 1200);
+        setMessage('💥 La carte ennemie a été détruite ! 💥');
       } else if (attackerDestroyed) {
         triggerAnimation(attackerIndex, 'destroy');
+        playSound('destroy');
         setTimeout(() => {
           newBoard[attackerIndex] = null;
           newBoard[defenderIndex] = newDefender;
@@ -335,13 +651,13 @@ const TacticalCardGame = () => {
           delete updatedDamaged[attackerIndex];
           setDamagedValues(updatedDamaged);
           setBoard([...newBoard]);
-        }, 400);
-        setMessage('Votre carte a été détruite !');
+        }, 1200);
+        setMessage('💥 Votre carte a été détruite ! 💥');
       } else {
         newBoard[attackerIndex] = newAttacker;
         newBoard[defenderIndex] = newDefender;
         setBoard(newBoard);
-        setMessage('Combat terminé !');
+        setMessage('⚔️ Combat terminé !');
       }
     }, 600);
 
@@ -350,6 +666,13 @@ const TacticalCardGame = () => {
   };
 
   const endTurn = () => {
+    if (gameMode === 'online' && playerNumber !== currentPlayer) {
+      setMessage('Ce n\'est pas votre tour !');
+      return;
+    }
+    
+    if (checkGameOver()) return;
+    
     const nextPlayer = currentPlayer === 1 ? 2 : 1;
     setCurrentPlayer(nextPlayer);
     setActionsUsed({ place: false, moveCount: 0, attack: false });
@@ -481,6 +804,14 @@ const TacticalCardGame = () => {
             </button>
             
             <button
+              onClick={() => setGameMode('online-menu')}
+              className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition transform hover:scale-105"
+            >
+              <span>🌐</span>
+              <span>Partie en Ligne</span>
+            </button>
+            
+            <button
               onClick={() => setGameMode('rules')}
               className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg transition transform hover:scale-105"
             >
@@ -488,6 +819,99 @@ const TacticalCardGame = () => {
               <span>Règles du Jeu</span>
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameMode === 'online-menu') {
+    return (
+      <div className="w-full h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 shadow-2xl">
+          <button
+            onClick={() => { setGameMode('menu'); setOnlineError(''); }}
+            className="flex items-center gap-2 mb-4 text-white hover:text-blue-400 transition"
+          >
+            <ArrowLeft size={20} />
+            <span>Retour</span>
+          </button>
+          
+          <h1 className="text-3xl font-bold text-center text-white mb-8">Partie en Ligne</h1>
+          
+          <div className="space-y-6">
+            <button
+              onClick={createOnlineGame}
+              className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition transform hover:scale-105"
+            >
+              <span>🎮</span>
+              <span>Créer une Partie</span>
+            </button>
+            
+            <div className="border-t border-slate-600 pt-6">
+              <p className="text-white text-center mb-4">Ou rejoindre une partie</p>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="CODE (6 caractères)"
+                  value={inputCode}
+                  onChange={(e) => setInputCode(e.target.value.toUpperCase().substring(0, 6))}
+                  maxLength={6}
+                  className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border-2 border-slate-600 focus:border-purple-500 outline-none text-center text-2xl font-bold tracking-widest"
+                />
+                <button
+                  onClick={joinOnlineGame}
+                  disabled={inputCode.length !== 6}
+                  className="w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg transition"
+                >
+                  Rejoindre la Partie
+                </button>
+              </div>
+            </div>
+            
+            {onlineError && (
+              <div className="bg-red-900 border border-red-500 text-red-100 px-4 py-3 rounded text-center">
+                {onlineError}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameMode === 'online' && isWaiting) {
+    return (
+      <div className="w-full h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 shadow-2xl text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">En attente d'un adversaire...</h2>
+          <p className="text-slate-300 mb-4">Partagez ce code avec votre adversaire :</p>
+          
+          <div className="bg-slate-900 rounded-lg p-6 mb-6">
+            <div className="text-5xl font-bold text-green-400 tracking-widest mb-3">{roomCode}</div>
+            <button
+              onClick={copyRoomCode}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded transition"
+            >
+              📋 Copier le code
+            </button>
+          </div>
+          
+          <div className="animate-pulse flex justify-center mb-6">
+            <div className="text-6xl">⏳</div>
+          </div>
+          
+          <p className="text-slate-400 text-sm mb-6">{message}</p>
+          
+          <button
+            onClick={() => {
+              setGameMode('menu');
+              setIsWaiting(false);
+              setRoomCode('');
+            }}
+            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+          >
+            Annuler
+          </button>
         </div>
       </div>
     );
@@ -545,6 +969,44 @@ const TacticalCardGame = () => {
   const player1Active = currentPlayer === 1;
   const player2Active = currentPlayer === 2;
   
+  if (gameOver) {
+    return (
+      <div className="w-full h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 shadow-2xl text-center">
+          <h1 className="text-4xl font-bold text-white mb-4">🎉 Partie terminée ! 🎉</h1>
+          <div className="my-8">
+            <div className={winner === 1 ? 'text-6xl font-bold text-blue-400 mb-4' : 'text-6xl font-bold text-red-400 mb-4'}>
+              Joueur {winner} gagne !
+            </div>
+            <p className="text-slate-300 text-lg">Félicitations !</p>
+          </div>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                setGameOver(false);
+                setWinner(null);
+                startLocalGame();
+              }}
+              className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition transform hover:scale-105"
+            >
+              Rejouer
+            </button>
+            <button
+              onClick={() => {
+                setGameOver(false);
+                setWinner(null);
+                setGameMode('menu');
+              }}
+              className="w-full px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg transition transform hover:scale-105"
+            >
+              Menu Principal
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="w-full bg-gradient-to-br from-slate-900 to-slate-800 p-4" style={{ height: '100vh', maxHeight: '100vh', overflow: 'hidden' }}>
       <audio id="game-music" loop preload="auto">
@@ -566,14 +1028,64 @@ const TacticalCardGame = () => {
           75% { transform: scale(1.15) rotate(5deg); }
         }
         @keyframes destroy {
-          0% { transform: scale(1) rotate(0deg); opacity: 1; }
-          50% { transform: scale(1.3) rotate(180deg); opacity: 0.5; }
-          100% { transform: scale(0) rotate(360deg); opacity: 0; }
+          0% { 
+            transform: scale(1) rotate(0deg); 
+            opacity: 1;
+            filter: brightness(1);
+          }
+          20% {
+            transform: scale(1.3) rotate(20deg);
+            opacity: 1;
+            filter: brightness(2) hue-rotate(45deg);
+          }
+          40% {
+            transform: scale(1.2) rotate(-20deg);
+            opacity: 0.9;
+            filter: brightness(3) hue-rotate(90deg);
+          }
+          60% {
+            transform: scale(1.4) rotate(45deg);
+            opacity: 0.7;
+            filter: brightness(2) blur(2px);
+          }
+          80% {
+            transform: scale(0.8) rotate(180deg);
+            opacity: 0.4;
+            filter: blur(5px);
+          }
+          100% { 
+            transform: scale(0) rotate(720deg); 
+            opacity: 0;
+            filter: blur(10px);
+          }
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+          20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        @keyframes explosion {
+          0% {
+            box-shadow: 0 0 0 0 rgba(255, 100, 0, 0.7);
+          }
+          50% {
+            box-shadow: 0 0 30px 20px rgba(255, 100, 0, 0.5);
+          }
+          100% {
+            box-shadow: 0 0 60px 40px rgba(255, 100, 0, 0);
+          }
+        }
+        @keyframes flash {
+          0%, 100% { background-color: transparent; }
+          50% { background-color: rgba(255, 255, 255, 0.8); }
         }
         .animate-place { animation: place 0.6s ease-out; }
         .animate-move { animation: move 0.6s ease-in-out; }
         .animate-attack { animation: attack 0.6s ease-in-out; }
-        .animate-destroy { animation: destroy 0.8s ease-in-out forwards; }
+        .animate-destroy { 
+          animation: destroy 1.2s ease-in-out forwards, explosion 1.2s ease-out, shake 0.3s ease-in-out 3;
+          z-index: 100;
+        }
       `}</style>
       
       <div className="h-full flex flex-col gap-3" style={{ maxHeight: 'calc(100vh - 32px)' }}>
