@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SkipForward, Smartphone, BookOpen, ArrowLeft } from 'lucide-react';
+import { createGame, joinGame, updateGame, subscribeToGame } from './firebase';
 
 const TacticalCardGame = () => {
   const [gameMode, setGameMode] = useState('menu');
@@ -250,11 +251,10 @@ const TacticalCardGame = () => {
         message: 'En attente du joueur 2...',
         gameOver: false,
         winner: null,
-        createdAt: Date.now(),
-        lastUpdate: Date.now()
+        createdAt: Date.now()
       };
       
-      await window.storage.set('game-' + code, JSON.stringify(gameState), true);
+      await createGame(code, gameState); // ← Changé
       
       setRoomCode(code);
       setPlayerNumber(1);
@@ -264,9 +264,7 @@ const TacticalCardGame = () => {
       setIsWaiting(true);
       setGameMode('online');
       setMessage('En attente du joueur 2...');
-      
-      // Polling pour détecter quand le joueur 2 rejoint
-      pollGameState(code, 1);
+      // pollGameState(code, 1); ← SUPPRIMÉ
     } catch (error) {
       setOnlineError('Erreur lors de la création de la partie');
       console.error(error);
@@ -281,14 +279,12 @@ const TacticalCardGame = () => {
     
     try {
       const code = inputCode.toUpperCase();
-      const result = await window.storage.get('game-' + code, true);
+      const gameState = await joinGame(code); // ← Changé
       
-      if (!result) {
+      if (!gameState) {
         setOnlineError('Code de partie introuvable');
         return;
       }
-      
-      const gameState = JSON.parse(result.value);
       
       if (gameState.player2Hand) {
         setOnlineError('Cette partie est déjà complète');
@@ -298,9 +294,8 @@ const TacticalCardGame = () => {
       const p2Deck = generateDeck();
       gameState.player2Hand = p2Deck;
       gameState.message = 'Joueur 1 commence';
-      gameState.lastUpdate = Date.now();
       
-      await window.storage.set('game-' + code, JSON.stringify(gameState), true);
+      await updateGame(code, gameState); // ← Changé
       
       setRoomCode(code);
       setPlayerNumber(2);
@@ -312,21 +307,51 @@ const TacticalCardGame = () => {
       setIsWaiting(false);
       setMessage('Joueur 1 commence');
       setOnlineError('');
-      
-      pollGameState(code, 2);
+      // pollGameState(code, 2); ← SUPPRIMÉ
     } catch (error) {
       setOnlineError('Erreur lors de la connexion');
       console.error(error);
     }
   };
 
+  useEffect(() => {
+    if (gameMode !== 'online' || !roomCode) return;
+  
+    const unsubscribe = subscribeToGame(roomCode, (gameState) => {
+      if (playerNumber === 1 && isWaiting && gameState.player2Hand) {
+        setPlayer2Hand(gameState.player2Hand);
+        setIsWaiting(false);
+        setMessage('Joueur 1 commence');
+        return;
+      }
+  
+      if (gameState.currentPlayer !== playerNumber || gameState.gameOver) {
+        setBoard(gameState.board || Array(25).fill(null));
+        setCurrentPlayer(gameState.currentPlayer);
+        setPlayer1Hand(gameState.player1Hand || []);
+        if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
+        setActionsUsed(gameState.actionsUsed || { place: false, moveCount: 0, attack: false });
+        setMovedCards(new Set(gameState.movedCards || []));
+        setDamagedValues(gameState.damagedValues || {});
+        setMessage(gameState.message || '');
+        setGameOver(gameState.gameOver || false);
+        setWinner(gameState.winner || null);
+      }
+    });
+  
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [gameMode, roomCode, playerNumber, isWaiting]);
+
   const pollGameState = (code, myPlayerNumber) => {
     const interval = setInterval(async () => {
       try {
-        const result = await window.storage.get('game-' + code, true);
-        if (!result) return;
-        
-        const gameState = JSON.parse(result.value);
+        const gameState = await joinGame(code);
+        if (!gameState) {
+          setOnlineError('Code introuvable');
+          return;
+        }
         
         // Si le joueur 2 a rejoint
         if (myPlayerNumber === 1 && gameState.player2Hand && isWaiting) {
@@ -374,7 +399,7 @@ const TacticalCardGame = () => {
         lastUpdate: Date.now()
       };
       
-      await window.storage.set('game-' + roomCode, JSON.stringify(gameState), true);
+      await updateGame(roomCode, gameState); // ← Changé
     } catch (error) {
       console.error('Sync error:', error);
     }
