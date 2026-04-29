@@ -132,8 +132,13 @@ const TacticalCardGame = () => {
   };
 
   const checkGameOver = () => {
-    const player1Cards = board.filter(cell => cell && cell.owner === 1).length + player1Hand.length;
-    const player2Cards = board.filter(cell => cell && cell.owner === 2).length + player2Hand.length;
+    if (!board || !Array.isArray(board)) return false;
+    
+    const player1Hand_safe = player1Hand || [];
+    const player2Hand_safe = player2Hand || [];
+    
+    const player1Cards = board.filter(cell => cell && cell.owner === 1).length + player1Hand_safe.length;
+    const player2Cards = board.filter(cell => cell && cell.owner === 2).length + player2Hand_safe.length;
     
     if (player1Cards === 0) {
       setGameOver(true);
@@ -272,54 +277,71 @@ const TacticalCardGame = () => {
   };
 
   const joinOnlineGame = async () => {
-    if (!inputCode || inputCode.length !== 6) {
-      setOnlineError('Code invalide (6 caractères requis)');
+  if (!inputCode || inputCode.length !== 6) {
+    setOnlineError('Code invalide (6 caractères requis)');
+    return;
+  }
+  
+  try {
+    const code = inputCode.toUpperCase();
+    const gameState = await joinGame(code);
+    
+    if (!gameState) {
+      setOnlineError('Code de partie introuvable');
       return;
     }
     
-    try {
-      const code = inputCode.toUpperCase();
-      const gameState = await joinGame(code); // ← Changé
-      
-      if (!gameState) {
-        setOnlineError('Code de partie introuvable');
-        return;
-      }
-      
-      if (gameState.player2Hand) {
-        setOnlineError('Cette partie est déjà complète');
-        return;
-      }
-      
-      const p2Deck = generateDeck();
-      gameState.player2Hand = p2Deck;
-      gameState.message = 'Joueur 1 commence';
-      
-      await updateGame(code, gameState); // ← Changé
-      
-      setRoomCode(code);
-      setPlayerNumber(2);
-      setPlayer1Hand(gameState.player1Hand);
-      setPlayer2Hand(p2Deck);
-      setBoard(gameState.board);
-      setCurrentPlayer(gameState.currentPlayer);
-      setGameMode('online');
-      setIsWaiting(false);
-      setMessage('Joueur 1 commence');
-      setOnlineError('');
-      // pollGameState(code, 2); ← SUPPRIMÉ
-    } catch (error) {
-      setOnlineError('Erreur lors de la connexion');
-      console.error(error);
+    if (gameState.player2Hand) {
+      setOnlineError('Cette partie est déjà complète');
+      return;
     }
-  };
+    
+    const p2Deck = generateDeck();
+    
+    // Construire un nouvel état complet
+    const updatedGameState = {
+      ...gameState,
+      player2Hand: p2Deck,
+      message: 'Joueur 1 commence',
+      board: gameState.board || Array(25).fill(null),
+      currentPlayer: gameState.currentPlayer || 1,
+      actionsUsed: gameState.actionsUsed || { place: false, moveCount: 0, attack: false },
+      movedCards: gameState.movedCards || [],
+      damagedValues: gameState.damagedValues || {}
+    };
+    
+    await updateGame(code, updatedGameState);
+    
+    // Initialiser tous les états avec des valeurs par défaut
+    setRoomCode(code);
+    setPlayerNumber(2);
+    setPlayer1Hand(updatedGameState.player1Hand || []);
+    setPlayer2Hand(p2Deck);
+    setBoard(updatedGameState.board);
+    setCurrentPlayer(updatedGameState.currentPlayer);
+    setActionsUsed(updatedGameState.actionsUsed);
+    setMovedCards(new Set(updatedGameState.movedCards));
+    setDamagedValues(updatedGameState.damagedValues);
+    setGameOver(false);
+    setWinner(null);
+    setGameMode('online');
+    setIsWaiting(false);
+    setMessage('Joueur 1 commence');
+    setOnlineError('');
+  } catch (error) {
+    setOnlineError('Erreur lors de la connexion');
+    console.error(error);
+  }
+};
 
   useEffect(() => {
     if (gameMode !== 'online' || !roomCode) return;
   
     const unsubscribe = subscribeToGame(roomCode, (gameState) => {
+      if (!gameState) return;
+  
       if (playerNumber === 1 && isWaiting && gameState.player2Hand) {
-        setPlayer2Hand(gameState.player2Hand);
+        setPlayer2Hand(gameState.player2Hand || []);
         setIsWaiting(false);
         setMessage('Joueur 1 commence');
         return;
@@ -327,9 +349,9 @@ const TacticalCardGame = () => {
   
       if (gameState.currentPlayer !== playerNumber || gameState.gameOver) {
         setBoard(gameState.board || Array(25).fill(null));
-        setCurrentPlayer(gameState.currentPlayer);
+        setCurrentPlayer(gameState.currentPlayer || 1);
         setPlayer1Hand(gameState.player1Hand || []);
-        if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
+        setPlayer2Hand(gameState.player2Hand || []);
         setActionsUsed(gameState.actionsUsed || { place: false, moveCount: 0, attack: false });
         setMovedCards(new Set(gameState.movedCards || []));
         setDamagedValues(gameState.damagedValues || {});
@@ -752,10 +774,12 @@ const TacticalCardGame = () => {
   };
 
   const calculateDeckTotal = (hand) => {
+    if (!hand || !Array.isArray(hand)) return 0;
     return hand.reduce((sum, card) => sum + calculateCardTotal(card), 0);
   };
   
   const calculateBoardTotal = (player) => {
+    if (!board || !Array.isArray(board)) return 0;
     return board.reduce((sum, cell) => {
       if (cell && cell.owner === player) {
         return sum + calculateCardTotal(cell);
