@@ -24,150 +24,88 @@ const TacticalCardGame = () => {
   const [isWaiting, setIsWaiting] = useState(false);
   const [onlineError, setOnlineError] = useState('');
 
+  // Effets sonores
   const playSound = (type) => {
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       
       if (type === 'place') {
-        // Son de placement : ton ascendant
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
-        
         oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
         oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.1);
-        
         gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-        
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.2);
       }
       
       if (type === 'move') {
-        // Son de déplacement : swoosh
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
-        
         oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
         oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.15);
-        
         gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-        
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.15);
       }
       
       if (type === 'attack') {
-        // Son d'attaque : impact
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
-        
         oscillator.type = 'square';
         oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
         oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.1);
-        
         gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-        
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.1);
       }
       
       if (type === 'destroy') {
-        // Son de destruction : explosion
         const noise = audioContext.createBufferSource();
         const bufferSize = audioContext.sampleRate * 0.5;
         const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
         const data = buffer.getChannelData(0);
-        
         for (let i = 0; i < bufferSize; i++) {
           data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
         }
-        
         noise.buffer = buffer;
-        
         const filter = audioContext.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.setValueAtTime(1000, audioContext.currentTime);
         filter.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.5);
-        
         const gainNode = audioContext.createGain();
         gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        
         noise.connect(filter);
         filter.connect(gainNode);
         gainNode.connect(audioContext.destination);
-        
         noise.start(audioContext.currentTime);
         noise.stop(audioContext.currentTime + 0.5);
         
-        // Ajouter un boom grave
         const boom = audioContext.createOscillator();
         const boomGain = audioContext.createGain();
         boom.connect(boomGain);
         boomGain.connect(audioContext.destination);
-        
         boom.type = 'sine';
         boom.frequency.setValueAtTime(80, audioContext.currentTime);
         boom.frequency.exponentialRampToValueAtTime(20, audioContext.currentTime + 0.3);
-        
         boomGain.gain.setValueAtTime(0.5, audioContext.currentTime);
         boomGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-        
         boom.start(audioContext.currentTime);
         boom.stop(audioContext.currentTime + 0.3);
       }
     } catch (err) {
       console.log('Sound playback failed:', err);
-    }
-  };
-
-  const checkGameOver = () => {
-    if (!board || !Array.isArray(board)) return false;
-    
-    const player1Hand_safe = player1Hand || [];
-    const player2Hand_safe = player2Hand || [];
-    
-    const player1Cards = board.filter(cell => cell && cell.owner === 1).length + player1Hand_safe.length;
-    const player2Cards = board.filter(cell => cell && cell.owner === 2).length + player2Hand_safe.length;
-    
-    if (player1Cards === 0) {
-      setGameOver(true);
-      setWinner(2);
-      return true;
-    }
-    if (player2Cards === 0) {
-      setGameOver(true);
-      setWinner(1);
-      return true;
-    }
-    return false;
-  };
-
-  const toggleMusic = () => {
-    const audio = document.getElementById('game-music');
-    if (audio) {
-      if (isMusicPlaying) {
-        audio.pause();
-        setIsMusicPlaying(false);
-      } else {
-        audio.volume = 0.3;
-        audio.play()
-          .then(() => setIsMusicPlaying(true))
-          .catch(err => {
-            console.log('Erreur lecture audio:', err);
-            alert('Impossible de lire la musique. Vérifiez les paramètres de votre navigateur.');
-          });
-      }
     }
   };
 
@@ -207,7 +145,6 @@ const TacticalCardGame = () => {
       for (let j = 0; j < cardPoints; j++) {
         const keys = Object.keys(values);
         const randomKey = keys[Math.floor(Math.random() * keys.length)];
-        
         if (values[randomKey] < 9) {
           values[randomKey]++;
         } else {
@@ -217,8 +154,7 @@ const TacticalCardGame = () => {
       
       deck.push({ 
         id: 'card-' + i + '-' + Date.now() + '-' + Math.random(), 
-        ...values,
-        originalValues: { ...values }
+        ...values
       });
     }
     
@@ -231,9 +167,13 @@ const TacticalCardGame = () => {
     
     setPlayer1Hand([...p1Deck]);
     setPlayer2Hand([...p2Deck]);
+    setBoard(Array(25).fill(null));
+    setCurrentPlayer(1);
     setGameMode('local');
     setMessage('Joueur 1 commence');
     setPlayerNumber(null);
+    setGameOver(false);
+    setWinner(null);
   };
 
   const generateRoomCode = () => {
@@ -241,221 +181,188 @@ const TacticalCardGame = () => {
   };
 
   const createOnlineGame = async () => {
-  try {
-    const code = generateRoomCode();
-    const p1Deck = generateDeck();
-    
-    const gameState = {
-      player1Hand: p1Deck,
-      player2Hand: null,
-      board: Array(25).fill(null),
-      currentPlayer: 1,
-      actionsUsed: { place: false, moveCount: 0, attack: false },
-      movedCards: [],
-      damagedValues: {},
-      message: 'En attente du joueur 2...',
-      gameOver: false,
-      winner: null,
-      createdAt: Date.now()
-    };
-    
-    await createGame(code, gameState);
-    
-    // IMPORTANT : Set roomCode EN DERNIER pour éviter les race conditions
-    setPlayerNumber(1);
-    setPlayer1Hand(p1Deck);
-    setBoard(Array(25).fill(null));
-    setCurrentPlayer(1);
-    setIsWaiting(true);
-    setGameMode('online');
-    setMessage('En attente du joueur 2...');
-    setRoomCode(code); // ← Met le code en dernier
-  } catch (error) {
-    setOnlineError('Erreur lors de la création de la partie');
-    console.error(error);
-  }
-
-  const joinOnlineGame = async () => {
-  if (!inputCode || inputCode.length !== 6) {
-    setOnlineError('Code invalide (6 caractères requis)');
-    return;
-  }
-  
-  try {
-    const code = inputCode.toUpperCase();
-    const gameState = await joinGame(code);
-    
-    if (!gameState) {
-      setOnlineError('Code de partie introuvable');
-      return;
-    }
-    
-    if (gameState.player2Hand) {
-      setOnlineError('Cette partie est déjà complète');
-      return;
-    }
-    
-    const p2Deck = generateDeck();
-    
-    // Construire un nouvel état complet
-    const updatedGameState = {
-      ...gameState,
-      player2Hand: p2Deck,
-      message: 'Joueur 1 commence',
-      board: gameState.board || Array(25).fill(null),
-      currentPlayer: gameState.currentPlayer || 1,
-      actionsUsed: gameState.actionsUsed || { place: false, moveCount: 0, attack: false },
-      movedCards: gameState.movedCards || [],
-      damagedValues: gameState.damagedValues || {}
-    };
-    
-    await updateGame(code, updatedGameState);
-    
-    // Initialiser tous les états avec des valeurs par défaut
-    setRoomCode(code);
-    setPlayerNumber(2);
-    setPlayer1Hand(updatedGameState.player1Hand || []);
-    setPlayer2Hand(p2Deck);
-    setBoard(updatedGameState.board);
-    setCurrentPlayer(updatedGameState.currentPlayer);
-    setActionsUsed(updatedGameState.actionsUsed);
-    setMovedCards(new Set(updatedGameState.movedCards));
-    setDamagedValues(updatedGameState.damagedValues);
-    setGameOver(false);
-    setWinner(null);
-    setGameMode('online');
-    setIsWaiting(false);
-    setMessage('Joueur 1 commence');
-    setOnlineError('');
-  } catch (error) {
-    setOnlineError('Erreur lors de la connexion');
-    console.error(error);
-  }
-};
-
-  useEffect(() => {
-  // Ne s'abonner que quand TOUT est prêt
-  if (gameMode !== 'online' || !roomCode || !playerNumber) return;
-
-  const unsubscribe = subscribeToGame(roomCode, (gameState) => {
-    if (!gameState) return;
-
-    // CAS 1 : Joueur 1 en attente
-    if (playerNumber === 1 && isWaiting) {
-      // Détecter quand le joueur 2 a rejoint
-      if (gameState.player2Hand) {
-        setPlayer2Hand(gameState.player2Hand);
-        setIsWaiting(false);
-        setMessage(gameState.message || 'Joueur 1 commence');
-      }
-      return; // NE PAS continuer pour ne pas écraser
-    }
-
-    // CAS 2 : Synchroniser quand ce n'est pas notre tour
-    const shouldSync = gameState.currentPlayer !== playerNumber || gameState.gameOver;
-    
-    if (shouldSync) {
-      if (gameState.board) setBoard(gameState.board);
-      if (gameState.currentPlayer) setCurrentPlayer(gameState.currentPlayer);
-      if (gameState.player1Hand) setPlayer1Hand(gameState.player1Hand);
-      if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
-      if (gameState.actionsUsed) setActionsUsed(gameState.actionsUsed);
-      if (gameState.movedCards) setMovedCards(new Set(gameState.movedCards));
-      if (gameState.damagedValues) setDamagedValues(gameState.damagedValues);
-      if (gameState.message) setMessage(gameState.message);
-      setGameOver(gameState.gameOver || false);
-      setWinner(gameState.winner || null);
-    }
-  });
-
-  return () => {
-    if (unsubscribe) unsubscribe();
-  };
-}, [gameMode, roomCode, playerNumber, isWaiting]);
-
-  const pollGameState = (code, myPlayerNumber) => {
-    const interval = setInterval(async () => {
-      try {
-        const gameState = await joinGame(code);
-        if (!gameState) {
-          setOnlineError('Code introuvable');
-          return;
-        }
-        
-        // Si le joueur 2 a rejoint
-        if (myPlayerNumber === 1 && gameState.player2Hand && isWaiting) {
-          setPlayer2Hand(gameState.player2Hand);
-          setIsWaiting(false);
-          setMessage('Joueur 1 commence');
-        }
-        
-        // Synchroniser l'état si ce n'est pas notre tour
-        if (gameState.currentPlayer !== myPlayerNumber || gameState.gameOver) {
-          setBoard(gameState.board);
-          setCurrentPlayer(gameState.currentPlayer);
-          setPlayer1Hand(gameState.player1Hand);
-          if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
-          setActionsUsed(gameState.actionsUsed);
-          setMovedCards(new Set(gameState.movedCards));
-          setDamagedValues(gameState.damagedValues);
-          setMessage(gameState.message);
-          setGameOver(gameState.gameOver);
-          setWinner(gameState.winner);
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    }, 1500);
-    
-    return () => clearInterval(interval);
-  };
-
-  const syncGameState = async () => {
-    if (gameMode !== 'online' || !roomCode) return;
-    
     try {
+      const code = generateRoomCode();
+      const p1Deck = generateDeck();
+      
       const gameState = {
-        player1Hand: player1Hand,
-        player2Hand: player2Hand,
-        board: board,
-        currentPlayer: currentPlayer,
-        actionsUsed: actionsUsed,
-        movedCards: Array.from(movedCards),
-        damagedValues: damagedValues,
-        message: message,
-        gameOver: gameOver,
-        winner: winner,
-        lastUpdate: Date.now()
+        player1Hand: p1Deck,
+        player2Hand: null,
+        board: Array(25).fill(null),
+        currentPlayer: 1,
+        actionsUsed: { place: false, moveCount: 0, attack: false },
+        movedCards: [],
+        damagedValues: {},
+        message: 'En attente du joueur 2...',
+        gameOver: false,
+        winner: null,
+        createdAt: Date.now()
       };
       
-      await updateGame(roomCode, gameState); // ← Changé
+      await createGame(code, gameState);
+      
+      setPlayerNumber(1);
+      setPlayer1Hand(p1Deck);
+      setBoard(Array(25).fill(null));
+      setCurrentPlayer(1);
+      setIsWaiting(true);
+      setGameMode('online');
+      setMessage('En attente du joueur 2...');
+      setRoomCode(code);
     } catch (error) {
-      console.error('Sync error:', error);
+      setOnlineError('Erreur lors de la création de la partie');
+      console.error(error);
     }
   };
 
-  // Synchroniser à chaque changement d'état important
-  useEffect(() => {
-  // Ne sync QUE si :
-  // - On est en mode online
-  // - On a un roomCode
-  // - On n'attend PAS un adversaire
-  // - C'est NOTRE tour (sinon on écrase les modifs de l'autre)
-  if (
-    gameMode !== 'online' || 
-    !roomCode || 
-    isWaiting || 
-    !playerNumber ||
-    currentPlayer !== playerNumber  // ← CRUCIAL : ne sync que si c'est notre tour
-  ) return;
-  
-  syncGameState();
-}, [board, actionsUsed, message, gameOver, currentPlayer]);
+  const joinOnlineGame = async () => {
+    if (!inputCode || inputCode.length !== 6) {
+      setOnlineError('Code invalide (6 caractères requis)');
+      return;
+    }
     
+    try {
+      const code = inputCode.toUpperCase();
+      const gameState = await joinGame(code);
+      
+      if (!gameState) {
+        setOnlineError('Code de partie introuvable');
+        return;
+      }
+      
+      if (gameState.player2Hand) {
+        setOnlineError('Cette partie est déjà complète');
+        return;
+      }
+      
+      const p2Deck = generateDeck();
+      const updatedGameState = {
+        ...gameState,
+        player2Hand: p2Deck,
+        message: 'Joueur 1 commence',
+        board: gameState.board || Array(25).fill(null),
+        currentPlayer: gameState.currentPlayer || 1,
+        actionsUsed: gameState.actionsUsed || { place: false, moveCount: 0, attack: false },
+        movedCards: gameState.movedCards || [],
+        damagedValues: gameState.damagedValues || {}
+      };
+      
+      await updateGame(code, updatedGameState);
+      
+      setRoomCode(code);
+      setPlayerNumber(2);
+      setPlayer1Hand(updatedGameState.player1Hand || []);
+      setPlayer2Hand(p2Deck);
+      setBoard(updatedGameState.board);
+      setCurrentPlayer(updatedGameState.currentPlayer);
+      setActionsUsed(updatedGameState.actionsUsed);
+      setMovedCards(new Set(updatedGameState.movedCards));
+      setDamagedValues(updatedGameState.damagedValues);
+      setGameOver(false);
+      setWinner(null);
+      setGameMode('online');
+      setIsWaiting(false);
+      setMessage('Joueur 1 commence');
+      setOnlineError('');
+    } catch (error) {
+      setOnlineError('Erreur lors de la connexion');
+      console.error(error);
+    }
+  };
+
+  // Subscription Firebase pour la synchronisation temps réel
+  useEffect(() => {
+    if (gameMode !== 'online' || !roomCode || !playerNumber) return;
+
+    const unsubscribe = subscribeToGame(roomCode, (gameState) => {
+      if (!gameState) return;
+
+      // Joueur 1 attend, joueur 2 vient de rejoindre
+      if (playerNumber === 1 && isWaiting) {
+        if (gameState.player2Hand) {
+          setPlayer2Hand(gameState.player2Hand);
+          setIsWaiting(false);
+          setMessage(gameState.message || 'Joueur 1 commence');
+        }
+        return;
+      }
+
+      // Synchroniser uniquement si ce n'est pas notre tour
+      if (gameState.currentPlayer !== playerNumber || gameState.gameOver) {
+        if (gameState.board) setBoard(gameState.board);
+        if (gameState.currentPlayer) setCurrentPlayer(gameState.currentPlayer);
+        if (gameState.player1Hand) setPlayer1Hand(gameState.player1Hand);
+        if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
+        if (gameState.actionsUsed) setActionsUsed(gameState.actionsUsed);
+        if (gameState.movedCards) setMovedCards(new Set(gameState.movedCards));
+        if (gameState.damagedValues) setDamagedValues(gameState.damagedValues);
+        if (gameState.message) setMessage(gameState.message);
+        setGameOver(gameState.gameOver || false);
+        setWinner(gameState.winner || null);
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [gameMode, roomCode, playerNumber, isWaiting]);
+
+  // Synchroniser les changements vers Firebase
+  useEffect(() => {
+    if (gameMode !== 'online' || !roomCode || isWaiting || !playerNumber) return;
+    if (currentPlayer !== playerNumber) return;
+    
+    const syncGameState = async () => {
+      try {
+        const gameState = {
+          player1Hand: player1Hand,
+          player2Hand: player2Hand,
+          board: board,
+          currentPlayer: currentPlayer,
+          actionsUsed: actionsUsed,
+          movedCards: Array.from(movedCards),
+          damagedValues: damagedValues,
+          message: message,
+          gameOver: gameOver,
+          winner: winner,
+          lastUpdate: Date.now()
+        };
+        
+        await updateGame(roomCode, gameState);
+      } catch (error) {
+        console.error('Sync error:', error);
+      }
+    };
+    
+    syncGameState();
+  }, [board, actionsUsed, message, gameOver, currentPlayer]);
+
   const copyRoomCode = () => {
     navigator.clipboard.writeText(roomCode);
     setMessage('Code copié dans le presse-papiers !');
     setTimeout(() => setMessage('En attente du joueur 2...'), 2000);
+  };
+
+  const checkGameOver = () => {
+    if (!board || !Array.isArray(board)) return false;
+    
+    const p1Hand = player1Hand || [];
+    const p2Hand = player2Hand || [];
+    
+    const player1Cards = board.filter(cell => cell && cell.owner === 1).length + p1Hand.length;
+    const player2Cards = board.filter(cell => cell && cell.owner === 2).length + p2Hand.length;
+    
+    if (player1Cards === 0) {
+      setGameOver(true);
+      setWinner(2);
+      return true;
+    }
+    if (player2Cards === 0) {
+      setGameOver(true);
+      setWinner(1);
+      return true;
+    }
+    return false;
   };
 
   const triggerAnimation = (index, type) => {
@@ -501,10 +408,10 @@ const TacticalCardGame = () => {
 
   const handlePlaceCard = (cardIndex, boardIndex) => {
     if (gameMode === 'online' && playerNumber !== currentPlayer) {
-      setMessage('Ce n\'est pas votre tour !');
+      setMessage("Ce n'est pas votre tour !");
       return false;
     }
-    
+
     if (actionsUsed.place) {
       setMessage('Vous avez déjà placé une carte ce tour !');
       return false;
@@ -540,10 +447,10 @@ const TacticalCardGame = () => {
 
   const handleMoveCard = (fromIndex, toIndex) => {
     if (gameMode === 'online' && playerNumber !== currentPlayer) {
-      setMessage('Ce n\'est pas votre tour !');
+      setMessage("Ce n'est pas votre tour !");
       return false;
     }
-    
+
     if (actionsUsed.moveCount >= 2) {
       setMessage('Vous avez déjà effectué 2 déplacements ce tour !');
       return false;
@@ -561,7 +468,7 @@ const TacticalCardGame = () => {
 
     const adjacent = getAdjacentCells(fromIndex, true);
     if (!adjacent.includes(toIndex)) {
-      setMessage('Vous ne pouvez déplacer que d\'un emplacement !');
+      setMessage("Vous ne pouvez déplacer que d'un emplacement !");
       return false;
     }
 
@@ -585,10 +492,10 @@ const TacticalCardGame = () => {
 
   const handleAttack = (attackerIndex, defenderIndex) => {
     if (gameMode === 'online' && playerNumber !== currentPlayer) {
-      setMessage('Ce n\'est pas votre tour !');
+      setMessage("Ce n'est pas votre tour !");
       return false;
     }
-    
+
     if (actionsUsed.attack) {
       setMessage('Vous avez déjà attaqué ce tour !');
       return false;
@@ -609,7 +516,7 @@ const TacticalCardGame = () => {
 
     const adjacent = getAdjacentCells(attackerIndex, false);
     if (!adjacent.includes(defenderIndex)) {
-      setMessage('Vous ne pouvez attaquer qu\'une carte adjacente !');
+      setMessage("Vous ne pouvez attaquer qu'une carte adjacente !");
       return false;
     }
 
@@ -732,12 +639,12 @@ const TacticalCardGame = () => {
 
   const endTurn = () => {
     if (gameMode === 'online' && playerNumber !== currentPlayer) {
-      setMessage('Ce n\'est pas votre tour !');
+      setMessage("Ce n'est pas votre tour !");
       return;
     }
-    
+
     if (checkGameOver()) return;
-    
+
     const nextPlayer = currentPlayer === 1 ? 2 : 1;
     setCurrentPlayer(nextPlayer);
     setActionsUsed({ place: false, moveCount: 0, attack: false });
@@ -773,7 +680,6 @@ const TacticalCardGame = () => {
     if (dragType === 'hand') {
       handlePlaceCard(dragIndex, targetIndex);
     } else if (dragType === 'board') {
-      const sourceCard = board[dragIndex];
       const targetCard = board[targetIndex];
 
       if (targetCard && targetCard.owner !== currentPlayer) {
@@ -791,12 +697,12 @@ const TacticalCardGame = () => {
     return (card.top || 0) + (card.right || 0) + (card.bottom || 0) + (card.left || 0) + 
            (card.topLeft || 0) + (card.topRight || 0) + (card.bottomRight || 0) + (card.bottomLeft || 0);
   };
-  
+
   const calculateDeckTotal = (hand) => {
     if (!hand || !Array.isArray(hand)) return 0;
     return hand.reduce((sum, card) => sum + calculateCardTotal(card), 0);
   };
-  
+
   const calculateBoardTotal = (player) => {
     if (!board || !Array.isArray(board)) return 0;
     return board.reduce((sum, cell) => {
@@ -809,29 +715,24 @@ const TacticalCardGame = () => {
 
   const CardDisplay = (props) => {
     const card = props.card;
-  
-    // PROTECTION : si la carte n'existe pas, ne rien afficher
     if (!card) return null;
     
     const small = props.small || false;
     const cellIndex = props.cellIndex !== undefined ? props.cellIndex : null;
     const owner = props.owner || null;
     
-    // Valeurs par défaut pour éviter undefined
     const safeCard = {
-      top: card.top ?? 0,
-      right: card.right ?? 0,
-      bottom: card.bottom ?? 0,
-      left: card.left ?? 0,
-      topLeft: card.topLeft ?? 0,
-      topRight: card.topRight ?? 0,
-      bottomRight: card.bottomRight ?? 0,
-      bottomLeft: card.bottomLeft ?? 0,
-      owner: card.owner
+      top: card.top || 0,
+      right: card.right || 0,
+      bottom: card.bottom || 0,
+      left: card.left || 0,
+      topLeft: card.topLeft || 0,
+      topRight: card.topRight || 0,
+      bottomRight: card.bottomRight || 0,
+      bottomLeft: card.bottomLeft || 0
     };
     
     const cardTotal = calculateCardTotal(safeCard);
-    
     const damaged = cellIndex !== null ? (damagedValues[cellIndex] || {}) : {};
     const isDamaged = (key) => damaged && damaged[key];
     
@@ -839,7 +740,7 @@ const TacticalCardGame = () => {
     if (owner === 1) bgGradient = 'from-blue-600 to-blue-800';
     if (owner === 2) bgGradient = 'from-red-600 to-red-800';
     
-    const sizeClass = small ? 'w-full h-full' : 'w-full h-full';
+    const sizeClass = 'w-full h-full';
     const topClass = small ? 'top-1 text-xs' : 'top-1.5 text-base';
     const rightClass = small ? 'right-1 text-xs' : 'right-1.5 text-base';
     const bottomClass = small ? 'bottom-1 text-xs' : 'bottom-1.5 text-base';
@@ -847,18 +748,18 @@ const TacticalCardGame = () => {
     const cornerClass = small ? 'text-[10px]' : 'text-xs';
     const totalClass = small ? 'text-base' : 'text-xl';
     
-    return React.createElement('div', {
-      className: 'relative ' + sizeClass + ' bg-gradient-to-br ' + bgGradient + ' rounded-lg border-2 border-yellow-400 flex items-center justify-center shadow-lg'
-    },
-      React.createElement('div', { className: 'absolute ' + topClass + ' left-1/2 transform -translate-x-1/2 font-bold drop-shadow-lg ' + (isDamaged('top') ? 'text-red-500' : 'text-white') }, card.top),
-      React.createElement('div', { className: 'absolute ' + rightClass + ' top-1/2 transform -translate-y-1/2 font-bold drop-shadow-lg ' + (isDamaged('right') ? 'text-red-500' : 'text-white') }, card.right),
-      React.createElement('div', { className: 'absolute ' + bottomClass + ' left-1/2 transform -translate-x-1/2 font-bold drop-shadow-lg ' + (isDamaged('bottom') ? 'text-red-500' : 'text-white') }, card.bottom),
-      React.createElement('div', { className: 'absolute ' + leftClass + ' top-1/2 transform -translate-y-1/2 font-bold drop-shadow-lg ' + (isDamaged('left') ? 'text-red-500' : 'text-white') }, card.left),
-      React.createElement('div', { className: 'absolute top-0.5 left-0.5 ' + cornerClass + ' font-bold drop-shadow-lg ' + (isDamaged('topLeft') ? 'text-red-400' : 'text-yellow-300') }, card.topLeft),
-      React.createElement('div', { className: 'absolute top-0.5 right-0.5 ' + cornerClass + ' font-bold drop-shadow-lg ' + (isDamaged('topRight') ? 'text-red-400' : 'text-yellow-300') }, card.topRight),
-      React.createElement('div', { className: 'absolute bottom-0.5 right-0.5 ' + cornerClass + ' font-bold drop-shadow-lg ' + (isDamaged('bottomRight') ? 'text-red-400' : 'text-yellow-300') }, card.bottomRight),
-      React.createElement('div', { className: 'absolute bottom-0.5 left-0.5 ' + cornerClass + ' font-bold drop-shadow-lg ' + (isDamaged('bottomLeft') ? 'text-red-400' : 'text-yellow-300') }, card.bottomLeft),
-      React.createElement('div', { className: 'text-white font-bold ' + totalClass + ' drop-shadow-lg' }, cardTotal)
+    return (
+      <div className={'relative ' + sizeClass + ' bg-gradient-to-br ' + bgGradient + ' rounded-lg border-2 border-yellow-400 flex items-center justify-center shadow-lg'}>
+        <div className={'absolute ' + topClass + ' left-1/2 transform -translate-x-1/2 font-bold drop-shadow-lg ' + (isDamaged('top') ? 'text-red-500' : 'text-white')}>{safeCard.top}</div>
+        <div className={'absolute ' + rightClass + ' top-1/2 transform -translate-y-1/2 font-bold drop-shadow-lg ' + (isDamaged('right') ? 'text-red-500' : 'text-white')}>{safeCard.right}</div>
+        <div className={'absolute ' + bottomClass + ' left-1/2 transform -translate-x-1/2 font-bold drop-shadow-lg ' + (isDamaged('bottom') ? 'text-red-500' : 'text-white')}>{safeCard.bottom}</div>
+        <div className={'absolute ' + leftClass + ' top-1/2 transform -translate-y-1/2 font-bold drop-shadow-lg ' + (isDamaged('left') ? 'text-red-500' : 'text-white')}>{safeCard.left}</div>
+        <div className={'absolute top-0.5 left-0.5 ' + cornerClass + ' font-bold drop-shadow-lg ' + (isDamaged('topLeft') ? 'text-red-400' : 'text-yellow-300')}>{safeCard.topLeft}</div>
+        <div className={'absolute top-0.5 right-0.5 ' + cornerClass + ' font-bold drop-shadow-lg ' + (isDamaged('topRight') ? 'text-red-400' : 'text-yellow-300')}>{safeCard.topRight}</div>
+        <div className={'absolute bottom-0.5 right-0.5 ' + cornerClass + ' font-bold drop-shadow-lg ' + (isDamaged('bottomRight') ? 'text-red-400' : 'text-yellow-300')}>{safeCard.bottomRight}</div>
+        <div className={'absolute bottom-0.5 left-0.5 ' + cornerClass + ' font-bold drop-shadow-lg ' + (isDamaged('bottomLeft') ? 'text-red-400' : 'text-yellow-300')}>{safeCard.bottomLeft}</div>
+        <div className={'text-white font-bold ' + totalClass + ' drop-shadow-lg'}>{cardTotal}</div>
+      </div>
     );
   };
 
@@ -872,6 +773,8 @@ const TacticalCardGame = () => {
     if (animType === 'destroy') return 'animate-destroy';
     return '';
   };
+
+  // ========== RENDERS ==========
 
   if (gameMode === 'menu') {
     return (
@@ -965,45 +868,45 @@ const TacticalCardGame = () => {
   }
 
   if (gameMode === 'online' && isWaiting) {
-  return (
-    <div className="w-full h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 shadow-2xl text-center">
-        <h2 className="text-2xl font-bold text-white mb-4">En attente d'un adversaire...</h2>
-        <p className="text-slate-300 mb-4">Partagez ce code avec votre adversaire :</p>
-        
-        <div className="bg-slate-900 rounded-lg p-6 mb-6">
-          <div className="text-5xl font-bold text-green-400 tracking-widest mb-3">
-            {roomCode || 'Chargement...'}
+    return (
+      <div className="w-full h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 shadow-2xl text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">En attente d'un adversaire...</h2>
+          <p className="text-slate-300 mb-4">Partagez ce code avec votre adversaire :</p>
+          
+          <div className="bg-slate-900 rounded-lg p-6 mb-6">
+            <div className="text-5xl font-bold text-green-400 tracking-widest mb-3">
+              {roomCode || 'Chargement...'}
+            </div>
+            <button
+              onClick={copyRoomCode}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded transition"
+            >
+              📋 Copier le code
+            </button>
           </div>
+          
+          <div className="animate-pulse flex justify-center mb-6">
+            <div className="text-6xl">⏳</div>
+          </div>
+          
+          <p className="text-slate-400 text-sm mb-6">{message}</p>
+          
           <button
-            onClick={copyRoomCode}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded transition"
+            onClick={() => {
+              setGameMode('menu');
+              setIsWaiting(false);
+              setRoomCode('');
+              setPlayerNumber(null);
+            }}
+            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
           >
-            📋 Copier le code
+            Annuler
           </button>
         </div>
-        
-        <div className="animate-pulse flex justify-center mb-6">
-          <div className="text-6xl">⏳</div>
-        </div>
-        
-        <p className="text-slate-400 text-sm mb-6">{message}</p>
-        
-        <button
-          onClick={() => {
-            setGameMode('menu');
-            setIsWaiting(false);
-            setRoomCode('');
-            setPlayerNumber(null);
-          }}
-          className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
-        >
-          Annuler
-        </button>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   if (gameMode === 'rules') {
     return (
@@ -1054,9 +957,6 @@ const TacticalCardGame = () => {
     );
   }
 
-  const player1Active = currentPlayer === 1;
-  const player2Active = currentPlayer === 2;
-  
   if (gameOver) {
     return (
       <div className="w-full h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
@@ -1094,12 +994,12 @@ const TacticalCardGame = () => {
       </div>
     );
   }
-  
+
+  const player1Active = currentPlayer === 1;
+  const player2Active = currentPlayer === 2;
+
   return (
     <div className="w-full bg-gradient-to-br from-slate-900 to-slate-800 p-4" style={{ height: '100vh', maxHeight: '100vh', overflow: 'hidden' }}>
-      <audio id="game-music" loop preload="auto">
-        <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg" />
-      </audio>
       <style>{`
         @keyframes place {
           0% { transform: scale(0) rotate(0deg); opacity: 0; }
@@ -1116,36 +1016,12 @@ const TacticalCardGame = () => {
           75% { transform: scale(1.15) rotate(5deg); }
         }
         @keyframes destroy {
-          0% { 
-            transform: scale(1) rotate(0deg); 
-            opacity: 1;
-            filter: brightness(1);
-          }
-          20% {
-            transform: scale(1.3) rotate(20deg);
-            opacity: 1;
-            filter: brightness(2) hue-rotate(45deg);
-          }
-          40% {
-            transform: scale(1.2) rotate(-20deg);
-            opacity: 0.9;
-            filter: brightness(3) hue-rotate(90deg);
-          }
-          60% {
-            transform: scale(1.4) rotate(45deg);
-            opacity: 0.7;
-            filter: brightness(2) blur(2px);
-          }
-          80% {
-            transform: scale(0.8) rotate(180deg);
-            opacity: 0.4;
-            filter: blur(5px);
-          }
-          100% { 
-            transform: scale(0) rotate(720deg); 
-            opacity: 0;
-            filter: blur(10px);
-          }
+          0% { transform: scale(1) rotate(0deg); opacity: 1; filter: brightness(1); }
+          20% { transform: scale(1.3) rotate(20deg); opacity: 1; filter: brightness(2) hue-rotate(45deg); }
+          40% { transform: scale(1.2) rotate(-20deg); opacity: 0.9; filter: brightness(3) hue-rotate(90deg); }
+          60% { transform: scale(1.4) rotate(45deg); opacity: 0.7; filter: brightness(2) blur(2px); }
+          80% { transform: scale(0.8) rotate(180deg); opacity: 0.4; filter: blur(5px); }
+          100% { transform: scale(0) rotate(720deg); opacity: 0; filter: blur(10px); }
         }
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
@@ -1153,27 +1029,14 @@ const TacticalCardGame = () => {
           20%, 40%, 60%, 80% { transform: translateX(5px); }
         }
         @keyframes explosion {
-          0% {
-            box-shadow: 0 0 0 0 rgba(255, 100, 0, 0.7);
-          }
-          50% {
-            box-shadow: 0 0 30px 20px rgba(255, 100, 0, 0.5);
-          }
-          100% {
-            box-shadow: 0 0 60px 40px rgba(255, 100, 0, 0);
-          }
-        }
-        @keyframes flash {
-          0%, 100% { background-color: transparent; }
-          50% { background-color: rgba(255, 255, 255, 0.8); }
+          0% { box-shadow: 0 0 0 0 rgba(255, 100, 0, 0.7); }
+          50% { box-shadow: 0 0 30px 20px rgba(255, 100, 0, 0.5); }
+          100% { box-shadow: 0 0 60px 40px rgba(255, 100, 0, 0); }
         }
         .animate-place { animation: place 0.6s ease-out; }
         .animate-move { animation: move 0.6s ease-in-out; }
         .animate-attack { animation: attack 0.6s ease-in-out; }
-        .animate-destroy { 
-          animation: destroy 1.2s ease-in-out forwards, explosion 1.2s ease-out, shake 0.3s ease-in-out 3;
-          z-index: 100;
-        }
+        .animate-destroy { animation: destroy 1.2s ease-in-out forwards, explosion 1.2s ease-out, shake 0.3s ease-in-out 3; z-index: 100; }
       `}</style>
       
       <div className="h-full flex flex-col gap-3" style={{ maxHeight: 'calc(100vh - 32px)' }}>
@@ -1186,14 +1049,7 @@ const TacticalCardGame = () => {
             <span>Menu</span>
           </button>
           <h1 className="text-2xl font-bold text-white">Jeu de Cartes Tactique</h1>
-          <button
-            onClick={toggleMusic}
-            className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded transition"
-            style={{ minWidth: '100px', position: 'relative', zIndex: 1001 }}
-            type="button"
-          >
-            {isMusicPlaying ? '🔊 ON' : '🔇 OFF'}
-          </button>
+          <div style={{ width: '80px' }}></div>
         </div>
 
         <div className="flex gap-4 items-center" style={{ flexGrow: 1 }}>
@@ -1204,9 +1060,9 @@ const TacticalCardGame = () => {
             </div>
             <div className="text-white text-xs mb-2">Total: {calculateDeckTotal(player1Hand) + calculateBoardTotal(1)} pts</div>
             <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-              {player1Hand.map((card, idx) => (
+              {(player1Hand || []).map((card, idx) => (
                 <div 
-                  key={card.id}
+                  key={card.id || idx}
                   draggable={player1Active}
                   onDragStart={(e) => player1Active && handleDragStart(e, 'hand', idx)}
                   className={player1Active ? 'cursor-grab active:cursor-grabbing hover:scale-105 transform transition' : 'opacity-50 transform transition'}
@@ -1230,11 +1086,11 @@ const TacticalCardGame = () => {
           <div className="flex-1 flex flex-col gap-3 h-full">
             <div className="flex-1 bg-slate-700 rounded-lg p-3 flex items-center justify-center">
               <div className="grid grid-cols-5 gap-2" style={{ width: '500px', height: '500px' }}>
-                {board && board.map((cell, idx) => {
+                {(board || []).map((cell, idx) => {
                   if (isCorner(idx)) {
                     return <div key={idx} className="aspect-square bg-slate-900 rounded opacity-30"></div>;
                   }
-                
+
                   const isPlayerZone1 = isPlayerZone(idx, 1);
                   const isPlayerZone2 = isPlayerZone(idx, 2);
                   const isDragOver = dragOverCell === idx;
@@ -1286,9 +1142,9 @@ const TacticalCardGame = () => {
             </div>
             <div className="text-white text-xs mb-2">Total: {calculateDeckTotal(player2Hand) + calculateBoardTotal(2)} pts</div>
             <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-              {player2Hand.map((card, idx) => (
+              {(player2Hand || []).map((card, idx) => (
                 <div 
-                  key={card.id}
+                  key={card.id || idx}
                   draggable={player2Active}
                   onDragStart={(e) => player2Active && handleDragStart(e, 'hand', idx)}
                   className={player2Active ? 'cursor-grab active:cursor-grabbing hover:scale-105 transform transition' : 'opacity-50 transform transition'}
@@ -1315,4 +1171,3 @@ const TacticalCardGame = () => {
 };
 
 export default TacticalCardGame;
-}
