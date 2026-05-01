@@ -138,23 +138,26 @@ const restoreMovedCards = (movedCards) => {
 };
 
 export const createGame = async (code, gameState) => {
-  await set(ref(db, 'games/' + code), gameState);
+  const cleaned = cleanForFirebase(gameState);
+  await set(ref(db, 'games/' + code), cleaned);
 };
 
 export const joinGame = async (code) => {
-  const snapshot = await get(ref(db, 'games/' + code));
-  return snapshot.exists() ? snapshot.val() : null;
+  const snapshot = await get(child(ref(db), 'games/' + code));
+  if (!snapshot.exists()) return null;
+  return restoreGameState(snapshot.val());
 };
 
 export const updateGame = async (code, gameState) => {
-  await update(ref(db, 'games/' + code), gameState);
+  const cleaned = cleanForFirebase(gameState);
+  await set(ref(db, 'games/' + code), cleaned);
 };
 
 export const subscribeToGame = (code, callback) => {
   const gameRef = ref(db, 'games/' + code);
   return onValue(gameRef, (snapshot) => {
     if (snapshot.exists()) {
-      callback(snapshot.val());
+      callback(restoreGameState(snapshot.val()));
     }
   });
 };
