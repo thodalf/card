@@ -241,40 +241,39 @@ const TacticalCardGame = () => {
   };
 
   const createOnlineGame = async () => {
-    try {
-      const code = generateRoomCode();
-      const p1Deck = generateDeck();
-      
-      const gameState = {
-        player1Hand: p1Deck,
-        player2Hand: null,
-        board: Array(25).fill(null),
-        currentPlayer: 1,
-        actionsUsed: { place: false, moveCount: 0, attack: false },
-        movedCards: [],
-        damagedValues: {},
-        message: 'En attente du joueur 2...',
-        gameOver: false,
-        winner: null,
-        createdAt: Date.now()
-      };
-      
-      await createGame(code, gameState); // ← Changé
-      
-      setRoomCode(code);
-      setPlayerNumber(1);
-      setPlayer1Hand(p1Deck);
-      setBoard(Array(25).fill(null));
-      setCurrentPlayer(1);
-      setIsWaiting(true);
-      setGameMode('online');
-      setMessage('En attente du joueur 2...');
-      // pollGameState(code, 1); ← SUPPRIMÉ
-    } catch (error) {
-      setOnlineError('Erreur lors de la création de la partie');
-      console.error(error);
-    }
-  };
+  try {
+    const code = generateRoomCode();
+    const p1Deck = generateDeck();
+    
+    const gameState = {
+      player1Hand: p1Deck,
+      player2Hand: null,
+      board: Array(25).fill(null),
+      currentPlayer: 1,
+      actionsUsed: { place: false, moveCount: 0, attack: false },
+      movedCards: [],
+      damagedValues: {},
+      message: 'En attente du joueur 2...',
+      gameOver: false,
+      winner: null,
+      createdAt: Date.now()
+    };
+    
+    await createGame(code, gameState);
+    
+    // IMPORTANT : Set roomCode EN DERNIER pour éviter les race conditions
+    setPlayerNumber(1);
+    setPlayer1Hand(p1Deck);
+    setBoard(Array(25).fill(null));
+    setCurrentPlayer(1);
+    setIsWaiting(true);
+    setGameMode('online');
+    setMessage('En attente du joueur 2...');
+    setRoomCode(code); // ← Met le code en dernier
+  } catch (error) {
+    setOnlineError('Erreur lors de la création de la partie');
+    console.error(error);
+  }
 
   const joinOnlineGame = async () => {
   if (!inputCode || inputCode.length !== 6) {
@@ -335,36 +334,44 @@ const TacticalCardGame = () => {
 };
 
   useEffect(() => {
-    if (gameMode !== 'online' || !roomCode) return;
-  
-    const unsubscribe = subscribeToGame(roomCode, (gameState) => {
-      if (!gameState) return;
-  
-      if (playerNumber === 1 && isWaiting && gameState.player2Hand) {
-        setPlayer2Hand(gameState.player2Hand || []);
+  // Ne s'abonner que quand TOUT est prêt
+  if (gameMode !== 'online' || !roomCode || !playerNumber) return;
+
+  const unsubscribe = subscribeToGame(roomCode, (gameState) => {
+    if (!gameState) return;
+
+    // CAS 1 : Joueur 1 en attente
+    if (playerNumber === 1 && isWaiting) {
+      // Détecter quand le joueur 2 a rejoint
+      if (gameState.player2Hand) {
+        setPlayer2Hand(gameState.player2Hand);
         setIsWaiting(false);
-        setMessage('Joueur 1 commence');
-        return;
+        setMessage(gameState.message || 'Joueur 1 commence');
       }
-  
-      if (gameState.currentPlayer !== playerNumber || gameState.gameOver) {
-        setBoard(gameState.board || Array(25).fill(null));
-        setCurrentPlayer(gameState.currentPlayer || 1);
-        setPlayer1Hand(gameState.player1Hand || []);
-        setPlayer2Hand(gameState.player2Hand || []);
-        setActionsUsed(gameState.actionsUsed || { place: false, moveCount: 0, attack: false });
-        setMovedCards(new Set(gameState.movedCards || []));
-        setDamagedValues(gameState.damagedValues || {});
-        setMessage(gameState.message || '');
-        setGameOver(gameState.gameOver || false);
-        setWinner(gameState.winner || null);
-      }
-    });
-  
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [gameMode, roomCode, playerNumber, isWaiting]);
+      return; // NE PAS continuer pour ne pas écraser
+    }
+
+    // CAS 2 : Synchroniser quand ce n'est pas notre tour
+    const shouldSync = gameState.currentPlayer !== playerNumber || gameState.gameOver;
+    
+    if (shouldSync) {
+      if (gameState.board) setBoard(gameState.board);
+      if (gameState.currentPlayer) setCurrentPlayer(gameState.currentPlayer);
+      if (gameState.player1Hand) setPlayer1Hand(gameState.player1Hand);
+      if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
+      if (gameState.actionsUsed) setActionsUsed(gameState.actionsUsed);
+      if (gameState.movedCards) setMovedCards(new Set(gameState.movedCards));
+      if (gameState.damagedValues) setDamagedValues(gameState.damagedValues);
+      if (gameState.message) setMessage(gameState.message);
+      setGameOver(gameState.gameOver || false);
+      setWinner(gameState.winner || null);
+    }
+  });
+
+  return () => {
+    if (unsubscribe) unsubscribe();
+  };
+}, [gameMode, roomCode, playerNumber, isWaiting]);
 
   const pollGameState = (code, myPlayerNumber) => {
     const interval = setInterval(async () => {
@@ -429,11 +436,22 @@ const TacticalCardGame = () => {
 
   // Synchroniser à chaque changement d'état important
   useEffect(() => {
-    if (gameMode === 'online' && !isWaiting) {
-      syncGameState();
-    }
-  }, [board, currentPlayer, player1Hand, player2Hand, actionsUsed, message, gameOver]);
-
+  // Ne sync QUE si :
+  // - On est en mode online
+  // - On a un roomCode
+  // - On n'attend PAS un adversaire
+  // - C'est NOTRE tour (sinon on écrase les modifs de l'autre)
+  if (
+    gameMode !== 'online' || 
+    !roomCode || 
+    isWaiting || 
+    !playerNumber ||
+    currentPlayer !== playerNumber  // ← CRUCIAL : ne sync que si c'est notre tour
+  ) return;
+  
+  syncGameState();
+}, [board, actionsUsed, message, gameOver, currentPlayer]);
+    
   const copyRoomCode = () => {
     navigator.clipboard.writeText(roomCode);
     setMessage('Code copié dans le presse-papiers !');
@@ -947,42 +965,45 @@ const TacticalCardGame = () => {
   }
 
   if (gameMode === 'online' && isWaiting) {
-    return (
-      <div className="w-full h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 shadow-2xl text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">En attente d'un adversaire...</h2>
-          <p className="text-slate-300 mb-4">Partagez ce code avec votre adversaire :</p>
-          
-          <div className="bg-slate-900 rounded-lg p-6 mb-6">
-            <div className="text-5xl font-bold text-green-400 tracking-widest mb-3">{roomCode}</div>
-            <button
-              onClick={copyRoomCode}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded transition"
-            >
-              📋 Copier le code
-            </button>
+  return (
+    <div className="w-full h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 shadow-2xl text-center">
+        <h2 className="text-2xl font-bold text-white mb-4">En attente d'un adversaire...</h2>
+        <p className="text-slate-300 mb-4">Partagez ce code avec votre adversaire :</p>
+        
+        <div className="bg-slate-900 rounded-lg p-6 mb-6">
+          <div className="text-5xl font-bold text-green-400 tracking-widest mb-3">
+            {roomCode || 'Chargement...'}
           </div>
-          
-          <div className="animate-pulse flex justify-center mb-6">
-            <div className="text-6xl">⏳</div>
-          </div>
-          
-          <p className="text-slate-400 text-sm mb-6">{message}</p>
-          
           <button
-            onClick={() => {
-              setGameMode('menu');
-              setIsWaiting(false);
-              setRoomCode('');
-            }}
-            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+            onClick={copyRoomCode}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded transition"
           >
-            Annuler
+            📋 Copier le code
           </button>
         </div>
+        
+        <div className="animate-pulse flex justify-center mb-6">
+          <div className="text-6xl">⏳</div>
+        </div>
+        
+        <p className="text-slate-400 text-sm mb-6">{message}</p>
+        
+        <button
+          onClick={() => {
+            setGameMode('menu');
+            setIsWaiting(false);
+            setRoomCode('');
+            setPlayerNumber(null);
+          }}
+          className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+        >
+          Annuler
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   if (gameMode === 'rules') {
     return (
