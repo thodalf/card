@@ -769,10 +769,11 @@ const TacticalCardGame = () => {
   };
 
   const calculateCardTotal = (card) => {
-    return card.top + card.right + card.bottom + card.left + 
-           card.topLeft + card.topRight + card.bottomRight + card.bottomLeft;
+    if (!card) return 0;
+    return (card.top || 0) + (card.right || 0) + (card.bottom || 0) + (card.left || 0) + 
+           (card.topLeft || 0) + (card.topRight || 0) + (card.bottomRight || 0) + (card.bottomLeft || 0);
   };
-
+  
   const calculateDeckTotal = (hand) => {
     if (!hand || !Array.isArray(hand)) return 0;
     return hand.reduce((sum, card) => sum + calculateCardTotal(card), 0);
@@ -790,13 +791,30 @@ const TacticalCardGame = () => {
 
   const CardDisplay = (props) => {
     const card = props.card;
+  
+    // PROTECTION : si la carte n'existe pas, ne rien afficher
+    if (!card) return null;
+    
     const small = props.small || false;
-    const cellIndex = props.cellIndex || null;
+    const cellIndex = props.cellIndex !== undefined ? props.cellIndex : null;
     const owner = props.owner || null;
     
-    const cardTotal = calculateCardTotal(card);
+    // Valeurs par défaut pour éviter undefined
+    const safeCard = {
+      top: card.top ?? 0,
+      right: card.right ?? 0,
+      bottom: card.bottom ?? 0,
+      left: card.left ?? 0,
+      topLeft: card.topLeft ?? 0,
+      topRight: card.topRight ?? 0,
+      bottomRight: card.bottomRight ?? 0,
+      bottomLeft: card.bottomLeft ?? 0,
+      owner: card.owner
+    };
     
-    const damaged = cellIndex !== null ? damagedValues[cellIndex] : {};
+    const cardTotal = calculateCardTotal(safeCard);
+    
+    const damaged = cellIndex !== null ? (damagedValues[cellIndex] || {}) : {};
     const isDamaged = (key) => damaged && damaged[key];
     
     let bgGradient = 'from-blue-500 to-purple-600';
@@ -1191,11 +1209,11 @@ const TacticalCardGame = () => {
           <div className="flex-1 flex flex-col gap-3 h-full">
             <div className="flex-1 bg-slate-700 rounded-lg p-3 flex items-center justify-center">
               <div className="grid grid-cols-5 gap-2" style={{ width: '500px', height: '500px' }}>
-                {board.map((cell, idx) => {
+                {board && board.map((cell, idx) => {
                   if (isCorner(idx)) {
                     return <div key={idx} className="aspect-square bg-slate-900 rounded opacity-30"></div>;
                   }
-
+                
                   const isPlayerZone1 = isPlayerZone(idx, 1);
                   const isPlayerZone2 = isPlayerZone(idx, 2);
                   const isDragOver = dragOverCell === idx;
