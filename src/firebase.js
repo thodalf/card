@@ -31,6 +31,112 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 export const db = getDatabase(app);
 
+// Convertit les undefined en null et nettoie les données
+const cleanForFirebase = (obj) => {
+  if (obj === undefined) return null;
+  if (obj === null) return null;
+  if (Array.isArray(obj)) {
+    // Pour les arrays, on les transforme en objet avec index comme clés
+    // Cela force Firebase à conserver la structure
+    const arrObj = {};
+    obj.forEach((item, index) => {
+      arrObj[index] = cleanForFirebase(item);
+    });
+    return arrObj;
+  }
+  if (typeof obj === 'object') {
+    const cleaned = {};
+    Object.keys(obj).forEach(key => {
+      const value = cleanForFirebase(obj[key]);
+      cleaned[key] = value;
+    });
+    return cleaned;
+  }
+  return obj;
+};
+
+// Restaure les arrays depuis Firebase
+const restoreFromFirebase = (obj, expectedArrayLength = null) => {
+  if (obj === null || obj === undefined) return null;
+  
+  if (typeof obj === 'object' && !Array.isArray(obj)) {
+    const keys = Object.keys(obj);
+    
+    // Détecte si c'est un array (clés numériques)
+    const isArray = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+    
+    if (isArray) {
+      const maxIndex = Math.max(...keys.map(k => parseInt(k)));
+      const length = expectedArrayLength || maxIndex + 1;
+      const arr = new Array(length).fill(null);
+      keys.forEach(k => {
+        arr[parseInt(k)] = restoreFromFirebase(obj[k]);
+      });
+      return arr;
+    }
+    
+    // Sinon c'est un objet normal
+    const restored = {};
+    Object.keys(obj).forEach(key => {
+      restored[key] = restoreFromFirebase(obj[key]);
+    });
+    return restored;
+  }
+  
+  return obj;
+};
+
+// Restaure spécifiquement la structure du jeu
+const restoreGameState = (data) => {
+  if (!data) return null;
+  
+  return {
+    ...data,
+    board: restoreBoard(data.board),
+    player1Hand: restoreHand(data.player1Hand),
+    player2Hand: restoreHand(data.player2Hand),
+    movedCards: restoreMovedCards(data.movedCards),
+    damagedValues: data.damagedValues || {},
+    actionsUsed: data.actionsUsed || { place: false, moveCount: 0, attack: false },
+    currentPlayer: data.currentPlayer || 1,
+    message: data.message || '',
+    gameOver: data.gameOver || false,
+    winner: data.winner || null
+  };
+};
+
+const restoreBoard = (board) => {
+  const result = new Array(25).fill(null);
+  if (!board) return result;
+  
+  if (Array.isArray(board)) {
+    return board.map(cell => cell || null);
+  }
+  
+  // Si c'est un objet, convertir
+  Object.keys(board).forEach(key => {
+    const idx = parseInt(key);
+    if (!isNaN(idx) && idx < 25) {
+      result[idx] = board[key] || null;
+    }
+  });
+  return result;
+};
+
+const restoreHand = (hand) => {
+  if (!hand) return [];
+  if (Array.isArray(hand)) return hand.filter(c => c);
+  
+  // Si c'est un objet, convertir en array
+  return Object.values(hand).filter(c => c);
+};
+
+const restoreMovedCards = (movedCards) => {
+  if (!movedCards) return [];
+  if (Array.isArray(movedCards)) return movedCards;
+  return Object.values(movedCards);
+};
+
 export const createGame = async (code, gameState) => {
   await set(ref(db, 'games/' + code), gameState);
 };
