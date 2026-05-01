@@ -185,6 +185,20 @@ const TacticalCardGame = () => {
       const code = generateRoomCode();
       const p1Deck = generateDeck();
       
+      // Set tous les états AVANT d'écrire dans Firebase
+      setRoomCode(code);
+      setPlayerNumber(1);
+      setPlayer1Hand(p1Deck);
+      setBoard(Array(25).fill(null));
+      setCurrentPlayer(1);
+      setIsWaiting(true);
+      setGameMode('online');
+      setMessage('En attente du joueur 2...');
+      
+      // Petit délai pour laisser React mettre à jour
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Maintenant écrire dans Firebase
       const gameState = {
         player1Hand: p1Deck,
         player2Hand: null,
@@ -200,15 +214,6 @@ const TacticalCardGame = () => {
       };
       
       await createGame(code, gameState);
-      
-      setPlayerNumber(1);
-      setPlayer1Hand(p1Deck);
-      setBoard(Array(25).fill(null));
-      setCurrentPlayer(1);
-      setIsWaiting(true);
-      setGameMode('online');
-      setMessage('En attente du joueur 2...');
-      setRoomCode(code);
     } catch (error) {
       setOnlineError('Erreur lors de la création de la partie');
       console.error(error);
