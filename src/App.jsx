@@ -238,7 +238,7 @@ const TacticalCardGame = () => {
         return;
       }
       
-      if (gameState.player2Hand) {
+      if (gameState.player2Hand?.length !== 0) {
         setOnlineError('Cette partie est déjà complète');
         return;
       }
