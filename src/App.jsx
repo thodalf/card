@@ -282,86 +282,99 @@ const TacticalCardGame = () => {
   useEffect(() => {
   if (gameMode !== 'online' || !roomCode || !playerNumber) return;
 
-  console.log('Subscribing to:', roomCode);
+  console.log('Subscribing to game:', roomCode);
 
   const unsubscribe = subscribeToGame(roomCode, (gameState) => {
     if (!gameState) return;
 
-    // PROTECTION 1 : Le créateur de la partie ignore le premier callback
-    // car c'est juste ses propres données qui reviennent
-    if (isCreatorRef.current && initialLoadRef.current) {
-      console.log('Ignoring initial callback for creator');
-      initialLoadRef.current = false;
-      return;
-    }
+    console.log('Received game state:', gameState);
+    console.log('Current player:', gameState.currentPlayer, 'My player:', playerNumber);
 
-    // PROTECTION 2 : Le joueur 1 attend, vérifier UNIQUEMENT si le joueur 2 a rejoint
+    // Joueur 1 en attente : vérifier si joueur 2 a rejoint
     if (playerNumber === 1 && isWaiting) {
-      const hasPlayer2 = gameState.player2Hand && 
-                        Array.isArray(gameState.player2Hand) && 
-                        gameState.player2Hand.length > 0;
-      
-      if (hasPlayer2) {
-        console.log('Player 2 joined!');
+      if (gameState.player2Hand && Array.isArray(gameState.player2Hand) && gameState.player2Hand.length > 0) {
+        console.log('Player 2 joined, starting game');
         setPlayer2Hand(gameState.player2Hand);
         setIsWaiting(false);
         setMessage('Joueur 1 commence');
-        isCreatorRef.current = false;
       }
-      // Ne JAMAIS écraser les autres états pendant l'attente
       return;
     }
 
-    // Pour le joueur 2 ou après que la partie ait commencé
-    if (gameState.currentPlayer !== playerNumber || gameState.gameOver) {
-      if (gameState.board) setBoard(gameState.board);
-      if (gameState.currentPlayer) setCurrentPlayer(gameState.currentPlayer);
-      if (gameState.player1Hand) setPlayer1Hand(gameState.player1Hand);
+    // IMPORTANT : Synchroniser TOUJOURS les données quand quelqu'un d'autre joue
+    // Mais NE PAS écraser notre tour en cours
+    if (gameState.currentPlayer !== playerNumber) {
+      console.log('Syncing because it is the other player turn');
+      setBoard(gameState.board || Array(25).fill(null));
+      setCurrentPlayer(gameState.currentPlayer);
+      setPlayer1Hand(gameState.player1Hand || []);
       if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
-      if (gameState.actionsUsed) setActionsUsed(gameState.actionsUsed);
-      if (gameState.movedCards) setMovedCards(new Set(gameState.movedCards));
-      if (gameState.damagedValues) setDamagedValues(gameState.damagedValues);
-      if (gameState.message) setMessage(gameState.message);
+      setActionsUsed(gameState.actionsUsed || { place: false, moveCount: 0, attack: false });
+      setMovedCards(new Set(gameState.movedCards || []));
+      setDamagedValues(gameState.damagedValues || {});
+      setMessage(gameState.message || '');
       setGameOver(gameState.gameOver || false);
       setWinner(gameState.winner || null);
+    } else {
+      // C'est notre tour, on synchronise UNIQUEMENT les données de l'autre joueur
+      // (mais pas board ni currentPlayer ni actionsUsed)
+      console.log('My turn - only syncing opponent hand');
+      if (playerNumber === 1 && gameState.player2Hand) {
+        setPlayer2Hand(gameState.player2Hand);
+      }
+      if (playerNumber === 2 && gameState.player1Hand) {
+        setPlayer1Hand(gameState.player1Hand);
+      }
     }
   });
 
   return () => {
-    console.log('Unsubscribing from:', roomCode);
+    console.log('Unsubscribing');
     if (unsubscribe) unsubscribe();
   };
 }, [gameMode, roomCode, playerNumber, isWaiting]);
 
   // Synchroniser les changements vers Firebase
   useEffect(() => {
-    if (gameMode !== 'online' || !roomCode || isWaiting || !playerNumber) return;
-    if (currentPlayer !== playerNumber) return;
-    
-    const syncGameState = async () => {
-      try {
-        const gameState = {
-          player1Hand: player1Hand,
-          player2Hand: player2Hand,
-          board: board,
-          currentPlayer: currentPlayer,
-          actionsUsed: actionsUsed,
-          movedCards: Array.from(movedCards),
-          damagedValues: damagedValues,
-          message: message,
-          gameOver: gameOver,
-          winner: winner,
-          lastUpdate: Date.now()
-        };
-        
-        await updateGame(roomCode, gameState);
-      } catch (error) {
-        console.error('Sync error:', error);
-      }
-    };
-    
-    syncGameState();
-  }, [board, actionsUsed, message, gameOver, currentPlayer]);
+  // Conditions pour synchroniser :
+  // - Mode en ligne
+  // - Code de room valide
+  // - Pas en attente
+  // - Numéro de joueur défini
+  // - C'est NOTRE tour (donc nos modifications sont valides)
+  if (
+    gameMode !== 'online' || 
+    !roomCode || 
+    isWaiting || 
+    !playerNumber ||
+    currentPlayer !== playerNumber
+  ) return;
+  
+  const syncGameState = async () => {
+    try {
+      const gameState = {
+        player1Hand: player1Hand,
+        player2Hand: player2Hand,
+        board: board,
+        currentPlayer: currentPlayer,
+        actionsUsed: actionsUsed,
+        movedCards: Array.from(movedCards),
+        damagedValues: damagedValues,
+        message: message,
+        gameOver: gameOver,
+        winner: winner,
+        lastUpdate: Date.now()
+      };
+      
+      console.log('Syncing my changes to Firebase');
+      await updateGame(roomCode, gameState);
+    } catch (error) {
+      console.error('Sync error:', error);
+    }
+  };
+  
+  syncGameState();
+}, [board, actionsUsed, currentPlayer, gameOver]);
 
   const copyRoomCode = () => {
     navigator.clipboard.writeText(roomCode);
@@ -664,19 +677,48 @@ const TacticalCardGame = () => {
   };
 
   const endTurn = () => {
-    if (gameMode === 'online' && playerNumber !== currentPlayer) {
-      setMessage("Ce n'est pas votre tour !");
-      return;
-    }
+  if (gameMode === 'online' && playerNumber !== currentPlayer) {
+    setMessage("Ce n'est pas votre tour !");
+    return;
+  }
 
-    if (checkGameOver()) return;
+  if (checkGameOver()) return;
 
-    const nextPlayer = currentPlayer === 1 ? 2 : 1;
-    setCurrentPlayer(nextPlayer);
-    setActionsUsed({ place: false, moveCount: 0, attack: false });
-    setMovedCards(new Set());
-    setMessage('Joueur ' + nextPlayer + ' commence');
-  };
+  const nextPlayer = currentPlayer === 1 ? 2 : 1;
+  console.log('Ending turn, next player:', nextPlayer);
+  
+  // Mettre à jour tous les états ensemble
+  setCurrentPlayer(nextPlayer);
+  setActionsUsed({ place: false, moveCount: 0, attack: false });
+  setMovedCards(new Set());
+  setMessage('Joueur ' + nextPlayer + ' commence');
+  
+  // Forcer la synchronisation immédiate après endTurn
+  if (gameMode === 'online') {
+    setTimeout(async () => {
+      try {
+        const gameState = {
+          player1Hand: player1Hand,
+          player2Hand: player2Hand,
+          board: board,
+          currentPlayer: nextPlayer,  // Le nouveau joueur
+          actionsUsed: { place: false, moveCount: 0, attack: false },
+          movedCards: [],
+          damagedValues: damagedValues,
+          message: 'Joueur ' + nextPlayer + ' commence',
+          gameOver: false,
+          winner: null,
+          lastUpdate: Date.now()
+        };
+        
+        await updateGame(roomCode, gameState);
+        console.log('Turn ended, synced to Firebase');
+      } catch (error) {
+        console.error('Error syncing end turn:', error);
+      }
+    }, 100);
+  }
+};
 
   const handleDragStart = (e, type, index) => {
     setDraggedItem({ type, index });
