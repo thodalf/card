@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SkipForward, Smartphone, BookOpen, ArrowLeft } from 'lucide-react';
 import { createGame, joinGame, updateGame, subscribeToGame } from './firebase';
 
@@ -23,6 +23,9 @@ const TacticalCardGame = () => {
   const [playerNumber, setPlayerNumber] = useState(null);
   const [isWaiting, setIsWaiting] = useState(false);
   const [onlineError, setOnlineError] = useState('');
+
+  const initialLoadRef = useRef(true);
+  const isCreatorRef = useRef(false);
 
   // Effets sonores
   const playSound = (type) => {
@@ -181,44 +184,44 @@ const TacticalCardGame = () => {
   };
 
   const createOnlineGame = async () => {
-    try {
-      const code = generateRoomCode();
-      const p1Deck = generateDeck();
-      
-      // Set tous les états AVANT d'écrire dans Firebase
-      setRoomCode(code);
-      setPlayerNumber(1);
-      setPlayer1Hand(p1Deck);
-      setBoard(Array(25).fill(null));
-      setCurrentPlayer(1);
-      setIsWaiting(true);
-      setGameMode('online');
-      setMessage('En attente du joueur 2...');
-      
-      // Petit délai pour laisser React mettre à jour
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Maintenant écrire dans Firebase
-      const gameState = {
-        player1Hand: p1Deck,
-        player2Hand: null,
-        board: Array(25).fill(null),
-        currentPlayer: 1,
-        actionsUsed: { place: false, moveCount: 0, attack: false },
-        movedCards: [],
-        damagedValues: {},
-        message: 'En attente du joueur 2...',
-        gameOver: false,
-        winner: null,
-        createdAt: Date.now()
-      };
-      
-      await createGame(code, gameState);
-    } catch (error) {
-      setOnlineError('Erreur lors de la création de la partie');
-      console.error(error);
-    }
-  };
+  try {
+    const code = generateRoomCode();
+    const p1Deck = generateDeck();
+    
+    // Marquer comme créateur et en chargement initial
+    isCreatorRef.current = true;
+    initialLoadRef.current = true;
+    
+    setRoomCode(code);
+    setPlayerNumber(1);
+    setPlayer1Hand(p1Deck);
+    setBoard(Array(25).fill(null));
+    setCurrentPlayer(1);
+    setIsWaiting(true);
+    setGameMode('online');
+    setMessage('En attente du joueur 2...');
+    
+    const gameState = {
+      player1Hand: p1Deck,
+      player2Hand: null,
+      board: Array(25).fill(null),
+      currentPlayer: 1,
+      actionsUsed: { place: false, moveCount: 0, attack: false },
+      movedCards: [],
+      damagedValues: {},
+      message: 'En attente du joueur 2...',
+      gameOver: false,
+      winner: null,
+      createdAt: Date.now()
+    };
+    
+    await createGame(code, gameState);
+  } catch (error) {
+    setOnlineError('Erreur lors de la création de la partie');
+    console.error(error);
+    isCreatorRef.current = false;
+  }
+};
 
   const joinOnlineGame = async () => {
     if (!inputCode || inputCode.length !== 6) {
@@ -277,40 +280,58 @@ const TacticalCardGame = () => {
 
   // Subscription Firebase pour la synchronisation temps réel
   useEffect(() => {
-    if (gameMode !== 'online' || !roomCode || !playerNumber) return;
+  if (gameMode !== 'online' || !roomCode || !playerNumber) return;
 
-    const unsubscribe = subscribeToGame(roomCode, (gameState) => {
-      if (!gameState) return;
+  console.log('Subscribing to:', roomCode);
 
-      // Joueur 1 attend, joueur 2 vient de rejoindre
-      if (playerNumber === 1 && isWaiting) {
-        if (gameState.player2Hand) {
-          setPlayer2Hand(gameState.player2Hand);
-          setIsWaiting(false);
-          setMessage(gameState.message || 'Joueur 1 commence');
-        }
-        return;
+  const unsubscribe = subscribeToGame(roomCode, (gameState) => {
+    if (!gameState) return;
+
+    // PROTECTION 1 : Le créateur de la partie ignore le premier callback
+    // car c'est juste ses propres données qui reviennent
+    if (isCreatorRef.current && initialLoadRef.current) {
+      console.log('Ignoring initial callback for creator');
+      initialLoadRef.current = false;
+      return;
+    }
+
+    // PROTECTION 2 : Le joueur 1 attend, vérifier UNIQUEMENT si le joueur 2 a rejoint
+    if (playerNumber === 1 && isWaiting) {
+      const hasPlayer2 = gameState.player2Hand && 
+                        Array.isArray(gameState.player2Hand) && 
+                        gameState.player2Hand.length > 0;
+      
+      if (hasPlayer2) {
+        console.log('Player 2 joined!');
+        setPlayer2Hand(gameState.player2Hand);
+        setIsWaiting(false);
+        setMessage('Joueur 1 commence');
+        isCreatorRef.current = false;
       }
+      // Ne JAMAIS écraser les autres états pendant l'attente
+      return;
+    }
 
-      // Synchroniser uniquement si ce n'est pas notre tour
-      if (gameState.currentPlayer !== playerNumber || gameState.gameOver) {
-        if (gameState.board) setBoard(gameState.board);
-        if (gameState.currentPlayer) setCurrentPlayer(gameState.currentPlayer);
-        if (gameState.player1Hand) setPlayer1Hand(gameState.player1Hand);
-        if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
-        if (gameState.actionsUsed) setActionsUsed(gameState.actionsUsed);
-        if (gameState.movedCards) setMovedCards(new Set(gameState.movedCards));
-        if (gameState.damagedValues) setDamagedValues(gameState.damagedValues);
-        if (gameState.message) setMessage(gameState.message);
-        setGameOver(gameState.gameOver || false);
-        setWinner(gameState.winner || null);
-      }
-    });
+    // Pour le joueur 2 ou après que la partie ait commencé
+    if (gameState.currentPlayer !== playerNumber || gameState.gameOver) {
+      if (gameState.board) setBoard(gameState.board);
+      if (gameState.currentPlayer) setCurrentPlayer(gameState.currentPlayer);
+      if (gameState.player1Hand) setPlayer1Hand(gameState.player1Hand);
+      if (gameState.player2Hand) setPlayer2Hand(gameState.player2Hand);
+      if (gameState.actionsUsed) setActionsUsed(gameState.actionsUsed);
+      if (gameState.movedCards) setMovedCards(new Set(gameState.movedCards));
+      if (gameState.damagedValues) setDamagedValues(gameState.damagedValues);
+      if (gameState.message) setMessage(gameState.message);
+      setGameOver(gameState.gameOver || false);
+      setWinner(gameState.winner || null);
+    }
+  });
 
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [gameMode, roomCode, playerNumber, isWaiting]);
+  return () => {
+    console.log('Unsubscribing from:', roomCode);
+    if (unsubscribe) unsubscribe();
+  };
+}, [gameMode, roomCode, playerNumber, isWaiting]);
 
   // Synchroniser les changements vers Firebase
   useEffect(() => {
@@ -898,16 +919,20 @@ const TacticalCardGame = () => {
           <p className="text-slate-400 text-sm mb-6">{message}</p>
           
           <button
-            onClick={() => {
-              setGameMode('menu');
-              setIsWaiting(false);
-              setRoomCode('');
-              setPlayerNumber(null);
-            }}
-            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
-          >
-            Annuler
-          </button>
+  onClick={() => {
+    setGameMode('menu');
+    setIsWaiting(false);
+    setRoomCode('');
+    setPlayerNumber(null);
+    setPlayer1Hand([]);
+    setPlayer2Hand([]);
+    isCreatorRef.current = false;
+    initialLoadRef.current = true;
+  }}
+  className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+>
+  Annuler
+</button>
         </div>
       </div>
     );
