@@ -667,6 +667,27 @@ const TacticalCardGame = () => {
     return true;
   };
 
+  const forceSyncTurn = async (newCurrentPlayer) => {
+  if (gameMode !== 'online' || !roomCode) return;
+  
+  try {
+    const snapshot = await joinGame(roomCode);
+    if (snapshot) {
+      const gameState = {
+        ...snapshot,
+        currentPlayer: newCurrentPlayer,
+        actionsUsed: { place: false, moveCount: 0, attack: false },
+        movedCards: [],
+        message: 'Joueur ' + newCurrentPlayer + ' commence',
+        lastUpdate: Date.now()
+      };
+      await updateGame(roomCode, gameState);
+    }
+  } catch (error) {
+    console.error('Force sync error:', error);
+  }
+};
+
   const endTurn = async () => {
   if (gameMode === 'online' && playerNumber !== currentPlayer) {
     setMessage("Ce n'est pas votre tour !");
@@ -704,6 +725,7 @@ const TacticalCardGame = () => {
       
       console.log('Syncing end turn to Firebase:', { currentPlayer: nextPlayer });
       await updateGame(roomCode, gameState);
+      forceSyncTurn(nextPlayer);
       console.log('End turn synced successfully');
     } catch (error) {
       console.error('Error syncing end turn:', error);
