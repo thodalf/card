@@ -237,8 +237,12 @@ const TacticalCardGame = () => {
         setOnlineError('Code de partie introuvable');
         return;
       }
+
+      if (gameState.player2Hand === null) {
+        gameState.player2Hand = [];
+      }
       
-      if (gameState.player2Hand === null || gameState.player2Hand.length !== 0) {
+      if (gameState.player2Hand?.length !== 0) {
         setOnlineError('Cette partie est déjà complète');
         return;
       }
