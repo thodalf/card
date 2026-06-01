@@ -292,7 +292,7 @@ const TacticalCardGame = () => {
     console.log('=== Received update ===');
     console.log('Game current player:', gameState.currentPlayer);
     console.log('My player number:', playerNumber);
-    console.log('Should sync?', gameState.currentPlayer !== playerNumber);
+    console.log('Game actionsUsed:', gameState.actionsUsed);
 
     // Joueur 1 en attente
     if (playerNumber === 1 && isWaiting) {
@@ -304,9 +304,11 @@ const TacticalCardGame = () => {
       return;
     }
 
-    // Synchroniser quand ce n'est pas notre tour
-    if (gameState.currentPlayer !== playerNumber) {
-      console.log('Syncing because opponent turn');
+    // Synchroniser quand ce n'est pas notre tour OU quand on vient d'avoir notre tour
+    const shouldSync = gameState.currentPlayer !== playerNumber || gameState.gameOver;
+    
+    if (shouldSync || (gameState.actionsUsed && !gameState.actionsUsed.place && !gameState.actionsUsed.attack && gameState.actionsUsed.moveCount === 0)) {
+      console.log('Syncing state');
       setBoard(gameState.board || Array(25).fill(null));
       setCurrentPlayer(gameState.currentPlayer);
       setPlayer1Hand(gameState.player1Hand || []);
@@ -700,33 +702,34 @@ const TacticalCardGame = () => {
   
   console.log('Ending turn - current:', currentPlayer, 'next:', nextPlayer);
   
-  // Mettre à jour localement
-  setCurrentPlayer(nextPlayer);
-  setActionsUsed({ place: false, moveCount: 0, attack: false });
-  setMovedCards(new Set());
-  setMessage('Joueur ' + nextPlayer + ' commence');
+  // Reset local AVANT la synchronisation
+  const newActionsUsed = { place: false, moveCount: 0, attack: false };
+  const newMessage = 'Joueur ' + nextPlayer + ' commence';
   
-  // SYNCHRONISATION IMMÉDIATE pour le mode en ligne
+  setCurrentPlayer(nextPlayer);
+  setActionsUsed(newActionsUsed);
+  setMovedCards(new Set());
+  setMessage(newMessage);
+  
+  // SYNCHRONISATION IMMÉDIATE et COMPLÈTE
   if (gameMode === 'online' && roomCode) {
     try {
       const gameState = {
         player1Hand: player1Hand,
         player2Hand: player2Hand,
         board: board,
-        currentPlayer: nextPlayer,  // ← IMPORTANT : utiliser nextPlayer, pas currentPlayer
-        actionsUsed: { place: false, moveCount: 0, attack: false },
-        movedCards: [],
+        currentPlayer: nextPlayer,
+        actionsUsed: newActionsUsed,  // ← Le nouveau actionsUsed reset
+        movedCards: [],  // ← Vide
         damagedValues: damagedValues,
-        message: 'Joueur ' + nextPlayer + ' commence',
+        message: newMessage,
         gameOver: false,
         winner: null,
         lastUpdate: Date.now()
       };
       
-      console.log('Syncing end turn to Firebase:', { currentPlayer: nextPlayer });
+      console.log('Syncing end turn:', { currentPlayer: nextPlayer, actionsUsed: newActionsUsed });
       await updateGame(roomCode, gameState);
-      forceSyncTurn(nextPlayer);
-      console.log('End turn synced successfully');
     } catch (error) {
       console.error('Error syncing end turn:', error);
     }
