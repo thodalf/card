@@ -1136,17 +1136,17 @@ const TacticalCardGame = () => {
             </div>
             <div className="text-white text-xs mb-2">Total: {calculateDeckTotal(player1Hand) + calculateBoardTotal(1)} pts</div>
             <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-              {(player1Hand || []).map((card, idx) => (
-                <div 
-                  key={card.id || idx}
-                  draggable={player1Active}
-                  onDragStart={(e) => player1Active && handleDragStart(e, 'hand', idx)}
-                  className={player1Active ? 'cursor-grab active:cursor-grabbing hover:scale-105 transform transition' : 'opacity-50 transform transition'}
-                  style={{ width: '100px', height: '100px' }}
-                >
-                  <CardDisplay card={card} small={true} owner={1} />
-                </div>
-              ))}
+              {(Array.isArray(player1Hand) ? player1Hand : []).filter(c => c).map((card, idx) => (
+  <div 
+    key={card.id || idx}
+    draggable={player1Active}
+    onDragStart={(e) => player1Active && handleDragStart(e, 'hand', idx)}
+    className={player1Active ? 'cursor-grab active:cursor-grabbing hover:scale-105 transform transition' : 'opacity-50 transform transition'}
+    style={{ width: '100px', height: '100px' }}
+  >
+    <CardDisplay card={card} small={true} owner={1} />
+  </div>
+))}
             </div>
             {player1Active && (
               <button
@@ -1161,49 +1161,50 @@ const TacticalCardGame = () => {
 
           <div className="flex-1 flex flex-col gap-3 h-full">
             <div className="flex-1 bg-slate-700 rounded-lg p-3 flex items-center justify-center">
-              <div className="grid grid-cols-5 gap-2" style={{ width: '500px', height: '500px' }}>
-                {(board || []).map((cell, idx) => {
-                  if (isCorner(idx)) {
-                    return <div key={idx} className="aspect-square bg-slate-900 rounded opacity-30"></div>;
-                  }
+              {/* Board avec protection */}
+<div className="grid grid-cols-5 gap-2" style={{ width: '500px', height: '500px' }}>
+  {(Array.isArray(board) ? board : Array(25).fill(null)).map((cell, idx) => {
+    if (isCorner(idx)) {
+      return <div key={idx} className="aspect-square bg-slate-900 rounded opacity-30"></div>;
+    }
 
-                  const isPlayerZone1 = isPlayerZone(idx, 1);
-                  const isPlayerZone2 = isPlayerZone(idx, 2);
-                  const isDragOver = dragOverCell === idx;
+    const isPlayerZone1 = isPlayerZone(idx, 1);
+    const isPlayerZone2 = isPlayerZone(idx, 2);
+    const isDragOver = dragOverCell === idx;
 
-                  let cellClass = 'aspect-square rounded-lg border-2 transition ';
-                  if (cell) {
-                    cellClass += cell.owner === 1 ? 'bg-blue-900 border-blue-400 ' : 'bg-red-900 border-red-400 ';
-                  } else if (isPlayerZone1) {
-                    cellClass += 'bg-blue-800 border-blue-600 opacity-50 ';
-                  } else if (isPlayerZone2) {
-                    cellClass += 'bg-red-800 border-red-600 opacity-50 ';
-                  } else {
-                    cellClass += 'bg-slate-600 border-slate-500 ';
-                  }
-                  if (isDragOver) cellClass += 'ring-4 ring-yellow-400 scale-105';
+    let cellClass = 'aspect-square rounded-lg border-2 transition ';
+    if (cell) {
+      cellClass += cell.owner === 1 ? 'bg-blue-900 border-blue-400 ' : 'bg-red-900 border-red-400 ';
+    } else if (isPlayerZone1) {
+      cellClass += 'bg-blue-800 border-blue-600 opacity-50 ';
+    } else if (isPlayerZone2) {
+      cellClass += 'bg-red-800 border-red-600 opacity-50 ';
+    } else {
+      cellClass += 'bg-slate-600 border-slate-500 ';
+    }
+    if (isDragOver) cellClass += 'ring-4 ring-yellow-400 scale-105';
 
-                  return (
-                    <div
-                      key={idx}
-                      onDragOver={(e) => handleDragOver(e, idx)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, idx)}
-                      className={cellClass}
-                    >
-                      {cell && (
-                        <div
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, 'board', idx)}
-                          className={'cursor-grab active:cursor-grabbing w-full h-full ' + getAnimationClass(idx)}
-                        >
-                          <CardDisplay card={cell} cellIndex={idx} owner={cell.owner} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+    return (
+      <div
+        key={idx}
+        onDragOver={(e) => handleDragOver(e, idx)}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e, idx)}
+        className={cellClass}
+      >
+        {cell && (
+          <div
+            draggable
+            onDragStart={(e) => handleDragStart(e, 'board', idx)}
+            className={'cursor-grab active:cursor-grabbing w-full h-full ' + getAnimationClass(idx)}
+          >
+            <CardDisplay card={cell} cellIndex={idx} owner={cell.owner} />
+          </div>
+        )}
+      </div>
+    );
+  })}
+</div>
             </div>
 
             <div className="bg-slate-700 rounded-lg p-2" style={{ flexShrink: 0 }}>
@@ -1217,19 +1218,20 @@ const TacticalCardGame = () => {
               <span className="text-white text-sm font-bold">J2</span>
             </div>
             <div className="text-white text-xs mb-2">Total: {calculateDeckTotal(player2Hand) + calculateBoardTotal(2)} pts</div>
-            <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-              {(player2Hand || []).map((card, idx) => (
-                <div 
-                  key={card.id || idx}
-                  draggable={player2Active}
-                  onDragStart={(e) => player2Active && handleDragStart(e, 'hand', idx)}
-                  className={player2Active ? 'cursor-grab active:cursor-grabbing hover:scale-105 transform transition' : 'opacity-50 transform transition'}
-                  style={{ width: '100px', height: '100px' }}
-                >
-                  <CardDisplay card={card} small={true} owner={2} />
-                </div>
-              ))}
-            </div>
+            {/* Hand du joueur 2 */}
+<div className="flex-1 flex flex-col gap-2 overflow-y-auto">
+  {(Array.isArray(player2Hand) ? player2Hand : []).filter(c => c).map((card, idx) => (
+    <div 
+      key={card.id || idx}
+      draggable={player2Active}
+      onDragStart={(e) => player2Active && handleDragStart(e, 'hand', idx)}
+      className={player2Active ? 'cursor-grab active:cursor-grabbing hover:scale-105 transform transition' : 'opacity-50 transform transition'}
+      style={{ width: '100px', height: '100px' }}
+    >
+      <CardDisplay card={card} small={true} owner={2} />
+    </div>
+  ))}
+</div>
             {player2Active && (
               <button
                 onClick={endTurn}
