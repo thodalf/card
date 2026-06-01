@@ -1,21 +1,14 @@
 // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
+import { initializeApp } from 'firebase/app';
 import { 
   getDatabase, 
   ref, 
   set, 
   get, 
   onValue, 
-  update, 
-  remove,
   child 
 } from 'firebase/database';
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -26,115 +19,76 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-export const db = getDatabase(app);
+const db = getDatabase(app);
 
-// Convertit les undefined en null et nettoie les données
+// Convertit tout en format compatible Firebase (arrays → objects)
 const cleanForFirebase = (obj) => {
-  if (obj === undefined) return null;
-  if (obj === null) return null;
+  if (obj === undefined || obj === null) return null;
+  
   if (Array.isArray(obj)) {
-    // Pour les arrays, on les transforme en objet avec index comme clés
-    // Cela force Firebase à conserver la structure
-    const arrObj = {};
+    if (obj.length === 0) return null;
+    const result = {};
     obj.forEach((item, index) => {
-      arrObj[index] = cleanForFirebase(item);
+      result[index.toString()] = cleanForFirebase(item);
     });
-    return arrObj;
+    return result;
   }
+  
   if (typeof obj === 'object') {
     const cleaned = {};
     Object.keys(obj).forEach(key => {
       const value = cleanForFirebase(obj[key]);
-      cleaned[key] = value;
+      if (value !== null) {
+        cleaned[key] = value;
+      }
     });
-    return cleaned;
+    return Object.keys(cleaned).length > 0 ? cleaned : null;
   }
+  
   return obj;
 };
 
-// Restaure les arrays depuis Firebase
-const restoreFromFirebase = (obj, expectedArrayLength = null) => {
-  if (obj === null || obj === undefined) return null;
+// Restaure les arrays depuis Firebase (objects → arrays)
+const objectToArray = (obj, expectedLength = null) => {
+  if (!obj) return expectedLength ? new Array(expectedLength).fill(null) : [];
+  if (Array.isArray(obj)) return obj;
   
-  if (typeof obj === 'object' && !Array.isArray(obj)) {
-    const keys = Object.keys(obj);
-    
-    // Détecte si c'est un array (clés numériques)
-    const isArray = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
-    
-    if (isArray) {
-      const maxIndex = Math.max(...keys.map(k => parseInt(k)));
-      const length = expectedArrayLength || maxIndex + 1;
-      const arr = new Array(length).fill(null);
-      keys.forEach(k => {
-        arr[parseInt(k)] = restoreFromFirebase(obj[k]);
-      });
-      return arr;
+  const keys = Object.keys(obj);
+  if (keys.length === 0) return expectedLength ? new Array(expectedLength).fill(null) : [];
+  
+  // Trouver l'index maximum
+  const maxIndex = Math.max(...keys.map(k => parseInt(k)).filter(n => !isNaN(n)));
+  const length = expectedLength || maxIndex + 1;
+  
+  const arr = new Array(length).fill(null);
+  keys.forEach(k => {
+    const idx = parseInt(k);
+    if (!isNaN(idx)) {
+      arr[idx] = obj[k];
     }
-    
-    // Sinon c'est un objet normal
-    const restored = {};
-    Object.keys(obj).forEach(key => {
-      restored[key] = restoreFromFirebase(obj[key]);
-    });
-    return restored;
-  }
-  
-  return obj;
+  });
+  return arr;
 };
 
-// Restaure spécifiquement la structure du jeu
+// Restaure complètement un game state
 const restoreGameState = (data) => {
   if (!data) return null;
   
   return {
-    ...data,
-    board: restoreBoard(data.board),
-    player1Hand: restoreHand(data.player1Hand),
-    player2Hand: restoreHand(data.player2Hand),
-    movedCards: restoreMovedCards(data.movedCards),
-    damagedValues: data.damagedValues || {},
-    actionsUsed: data.actionsUsed || { place: false, moveCount: 0, attack: false },
+    player1Hand: objectToArray(data.player1Hand) || [],
+    player2Hand: data.player2Hand ? objectToArray(data.player2Hand) : null,
+    board: objectToArray(data.board, 25),
     currentPlayer: data.currentPlayer || 1,
+    actionsUsed: data.actionsUsed || { place: false, moveCount: 0, attack: false },
+    movedCards: data.movedCards ? objectToArray(data.movedCards) : [],
+    damagedValues: data.damagedValues || {},
     message: data.message || '',
     gameOver: data.gameOver || false,
-    winner: data.winner || null
+    winner: data.winner || null,
+    createdAt: data.createdAt,
+    lastUpdate: data.lastUpdate
   };
-};
-
-const restoreBoard = (board) => {
-  const result = new Array(25).fill(null);
-  if (!board) return result;
-  
-  if (Array.isArray(board)) {
-    return board.map(cell => cell || null);
-  }
-  
-  // Si c'est un objet, convertir
-  Object.keys(board).forEach(key => {
-    const idx = parseInt(key);
-    if (!isNaN(idx) && idx < 25) {
-      result[idx] = board[key] || null;
-    }
-  });
-  return result;
-};
-
-const restoreHand = (hand) => {
-  if (!hand) return [];
-  if (Array.isArray(hand)) return hand.filter(c => c);
-  
-  // Si c'est un objet, convertir en array
-  return Object.values(hand).filter(c => c);
-};
-
-const restoreMovedCards = (movedCards) => {
-  if (!movedCards) return [];
-  if (Array.isArray(movedCards)) return movedCards;
-  return Object.values(movedCards);
 };
 
 export const createGame = async (code, gameState) => {
@@ -157,7 +111,8 @@ export const subscribeToGame = (code, callback) => {
   const gameRef = ref(db, 'games/' + code);
   return onValue(gameRef, (snapshot) => {
     if (snapshot.exists()) {
-      callback(restoreGameState(snapshot.val()));
+      const restored = restoreGameState(snapshot.val());
+      callback(restored);
     }
   });
 };
