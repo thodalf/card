@@ -24,12 +24,17 @@ const db = getDatabase(app);
 
 // Convertit tout en format compatible Firebase (arrays → objects)
 const cleanForFirebase = (obj) => {
-  if (obj === undefined || obj === null) return null;
+  if (obj === undefined) return null;
+  if (obj === null) return null;
   
   if (Array.isArray(obj)) {
-    if (obj.length === 0) return null;
+    // Filtrer les nulls et créer un objet indexé
+    const filtered = obj.map((item, index) => ({ item, index })).filter(x => x.item !== null && x.item !== undefined);
+    
+    if (filtered.length === 0) return null;
+    
     const result = {};
-    obj.forEach((item, index) => {
+    filtered.forEach(({ item, index }) => {
       result[index.toString()] = cleanForFirebase(item);
     });
     return result;
@@ -39,7 +44,7 @@ const cleanForFirebase = (obj) => {
     const cleaned = {};
     Object.keys(obj).forEach(key => {
       const value = cleanForFirebase(obj[key]);
-      if (value !== null) {
+      if (value !== null && value !== undefined) {
         cleaned[key] = value;
       }
     });
@@ -75,13 +80,51 @@ const objectToArray = (obj, expectedLength = null) => {
 const restoreGameState = (data) => {
   if (!data) return null;
   
+  // Helper pour convertir un objet en tableau
+  const toArray = (obj) => {
+    if (!obj) return [];
+    if (Array.isArray(obj)) return obj.filter(item => item !== null && item !== undefined);
+    
+    if (typeof obj === 'object') {
+      // Convertir les clés numériques en tableau
+      const keys = Object.keys(obj).sort((a, b) => parseInt(a) - parseInt(b));
+      return keys.map(k => obj[k]).filter(item => item !== null && item !== undefined);
+    }
+    
+    return [];
+  };
+  
+  // Helper pour le board (toujours 25 cases)
+  const toBoardArray = (obj) => {
+    const result = new Array(25).fill(null);
+    if (!obj) return result;
+    
+    if (Array.isArray(obj)) {
+      obj.forEach((item, idx) => {
+        if (idx < 25) result[idx] = item || null;
+      });
+      return result;
+    }
+    
+    if (typeof obj === 'object') {
+      Object.keys(obj).forEach(k => {
+        const idx = parseInt(k);
+        if (!isNaN(idx) && idx < 25) {
+          result[idx] = obj[k] || null;
+        }
+      });
+    }
+    
+    return result;
+  };
+  
   return {
-    player1Hand: objectToArray(data.player1Hand) || [],
-    player2Hand: data.player2Hand ? objectToArray(data.player2Hand) : null,
-    board: objectToArray(data.board, 25),
+    player1Hand: toArray(data.player1Hand),
+    player2Hand: data.player2Hand ? toArray(data.player2Hand) : null,
+    board: toBoardArray(data.board),
     currentPlayer: data.currentPlayer || 1,
     actionsUsed: data.actionsUsed || { place: false, moveCount: 0, attack: false },
-    movedCards: data.movedCards ? objectToArray(data.movedCards) : [],
+    movedCards: toArray(data.movedCards),
     damagedValues: data.damagedValues || {},
     message: data.message || '',
     gameOver: data.gameOver || false,
